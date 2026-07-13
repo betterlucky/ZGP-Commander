@@ -4,49 +4,27 @@ import type { FacilityMap, Prop, Room, Vec2, WallSegment } from "./types";
 const key = (x: number, y: number): string => `${x},${y}`;
 
 const rooms: Room[] = [
-  { id: "pharmacy", label: "PHARMACY", x: 2, y: 2, w: 12, h: 8, explored: true },
-  { id: "stores", label: "MEDICAL STORES", x: 16, y: 2, w: 8, h: 8, explored: true },
-  { id: "north-hall", label: "NORTH GALLERY", x: 12, y: 5, w: 30, h: 3, explored: true },
-  { id: "lab", label: "DIAGNOSTICS", x: 39, y: 2, w: 11, h: 9, explored: false },
-  { id: "west-ward", label: "RECOVERY WARD", x: 2, y: 13, w: 14, h: 10, explored: true },
-  { id: "reception", label: "RECEPTION", x: 18, y: 12, w: 14, h: 11, explored: true },
-  { id: "east-corridor", label: "EAST CORRIDOR", x: 33, y: 6, w: 4, h: 21, explored: true },
-  { id: "triage", label: "TRIAGE", x: 39, y: 14, w: 11, h: 12, explored: false },
-  { id: "service", label: "SERVICE PASSAGE", x: 9, y: 26, w: 31, h: 4, explored: true },
-  { id: "exit", label: "AMBULANCE BAY", x: 2, y: 25, w: 8, h: 6, explored: true },
-  { id: "pharmacy-link", label: "", x: 6, y: 9, w: 3, h: 5, explored: true },
-  { id: "stores-link", label: "", x: 20, y: 9, w: 3, h: 4, explored: true },
-  { id: "reception-link", label: "", x: 31, y: 17, w: 3, h: 3, explored: true },
-  { id: "triage-link", label: "", x: 36, y: 18, w: 4, h: 3, explored: false },
-  { id: "ward-link", label: "", x: 8, y: 22, w: 3, h: 5, explored: true },
-  { id: "reception-service", label: "", x: 24, y: 22, w: 4, h: 5, explored: true },
+  { id: "open-floor", label: "", x: 2, y: 2, w: 56, h: 34, explored: true },
+  { id: "receiving", label: "RECEIVING FLOOR", x: 3, y: 4, w: 17, h: 12, explored: true },
+  { id: "bulk-stores", label: "BULK MEDICAL STORES", x: 21, y: 4, w: 23, h: 12, explored: true },
+  { id: "dispatch", label: "DISPATCH", x: 45, y: 4, w: 12, h: 12, explored: true },
+  { id: "sorting", label: "OPEN SORTING FLOOR", x: 12, y: 18, w: 34, h: 15, explored: true },
+  { id: "ambulance-bay", label: "AMBULANCE BAY", x: 3, y: 25, w: 9, h: 10, explored: true },
 ];
 
 const fixedProps: Prop[] = [
-  { kind: "shelf", x: 3, y: 3, w: 1, h: 5 },
-  { kind: "shelf", x: 5, y: 3, w: 1, h: 5 },
-  { kind: "terminal", x: 11, y: 3, w: 1.5, h: 1 },
-  { kind: "crate", x: 9.2, y: 6.1, w: 1.2, h: 1.2 },
-  { kind: "shelf", x: 17, y: 3, w: 1, h: 5 },
-  { kind: "shelf", x: 21.7, y: 3, w: 1, h: 5 },
-  { kind: "bed", x: 3.5, y: 14.5, w: 3, h: 1.2 },
-  { kind: "bed", x: 3.5, y: 18, w: 3, h: 1.2 },
-  { kind: "bed", x: 10.5, y: 14.5, w: 3, h: 1.2 },
-  { kind: "bed", x: 10.5, y: 18, w: 3, h: 1.2 },
-  { kind: "desk", x: 20, y: 14, w: 4, h: 1.4 },
-  { kind: "chair", x: 21, y: 16, w: 0.8, h: 0.8 },
-  { kind: "desk", x: 26, y: 19, w: 4, h: 1.4 },
-  { kind: "chair", x: 28.8, y: 17.4, w: 0.8, h: 0.8 },
-  { kind: "terminal", x: 30, y: 13, w: 1, h: 1 },
-  { kind: "desk", x: 41, y: 3.5, w: 3, h: 1.2 },
-  { kind: "terminal", x: 47.5, y: 3, w: 1, h: 1 },
-  { kind: "bed", x: 40.5, y: 16, w: 3.2, h: 1.2 },
-  { kind: "bed", x: 45.5, y: 16, w: 3.2, h: 1.2 },
-  { kind: "bed", x: 40.5, y: 21, w: 3.2, h: 1.2 },
-  { kind: "bed", x: 45.5, y: 21, w: 3.2, h: 1.2 },
-  { kind: "crate", x: 13, y: 27, w: 1.2, h: 1.2 },
-  { kind: "crate", x: 16, y: 27.2, w: 1.1, h: 1.1 },
-  { kind: "terminal", x: 37.5, y: 27, w: 1, h: 1 },
+  { kind: "shelf", x: 15, y: 5, w: 1, h: 7 },
+  { kind: "shelf", x: 22, y: 5, w: 1, h: 7 },
+  { kind: "shelf", x: 29, y: 5, w: 1, h: 7 },
+  { kind: "shelf", x: 36, y: 5, w: 1, h: 7 },
+  { kind: "terminal", x: 7, y: 7, w: 1.5, h: 1 },
+  { kind: "terminal", x: 50, y: 7, w: 1.5, h: 1 },
+  { kind: "desk", x: 17, y: 20, w: 4, h: 1.4 },
+  { kind: "desk", x: 38, y: 27, w: 4, h: 1.4 },
+  { kind: "crate", x: 26, y: 22, w: 1.2, h: 1.2 },
+  { kind: "crate", x: 31, y: 29, w: 1.1, h: 1.1 },
+  { kind: "crate", x: 47, y: 10, w: 1.4, h: 1.4 },
+  { kind: "terminal", x: 53, y: 29, w: 1, h: 1 },
 ];
 
 const buildWalkable = (): Set<string> => {
@@ -74,9 +52,9 @@ const buildWalls = (walkable: Set<string>): WallSegment[] => {
 const scatterClutter = (walkable: Set<string>): Prop[] => {
   const random = mulberry32(88041);
   const props: Prop[] = [];
-  for (let i = 0; i < 34; i += 1) {
-    const x = Math.floor(random() * 48) + 2;
-    const y = Math.floor(random() * 28) + 2;
+  for (let i = 0; i < 22; i += 1) {
+    const x = Math.floor(random() * 54) + 2;
+    const y = Math.floor(random() * 32) + 2;
     if (!walkable.has(key(x, y))) continue;
     if (fixedProps.some((prop) => distance({ x, y }, prop) < 2.2)) continue;
     props.push({
@@ -94,13 +72,13 @@ const scatterClutter = (walkable: Set<string>): Prop[] => {
 export const createFacilityMap = (): FacilityMap => {
   const walkable = buildWalkable();
   return {
-    width: 52,
-    height: 33,
+    width: 60,
+    height: 38,
     rooms: rooms.map((room) => ({ ...room })),
     walls: buildWalls(walkable),
     props: [...fixedProps, ...scatterClutter(walkable)],
-    cache: { x: 9.8, y: 6.7 },
-    extraction: { x: 5.2, y: 28.2 },
+    cache: { x: 49.5, y: 9.5 },
+    extraction: { x: 6.5, y: 32.5 },
     walkable,
   };
 };

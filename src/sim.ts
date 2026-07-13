@@ -3,10 +3,10 @@ import { createFacilityMap, findPath, nearestWalkable } from "./map";
 import type { Contact, EventEntry, SimulationState, TacticalOutcome, TacticalSetup, TacticalUnitSetup, Unit, Vec2 } from "./types";
 
 const defaultUnitSetup: TacticalUnitSetup[] = [
-  { personId: "person-01", name: "MAYA", role: "MEDIC", color: "#66e9ff", weapon: "smg", health: 94 },
-  { personId: "person-02", name: "HOLT", role: "SCAVENGER", color: "#8bdcff", weapon: "shotgun", health: 82 },
-  { personId: "person-03", name: "REYES", role: "RANGER", color: "#55d5ff", weapon: "rifle", health: 88 },
-  { personId: "person-04", name: "FINCH", role: "ENGINEER", color: "#9eeaff", weapon: "carbine", health: 76 },
+  { personId: "person-01", name: "MAYA", role: "MEDIC", color: "#66e9ff", weapon: "smg", health: 94, scavengeSkill: 34 },
+  { personId: "person-02", name: "HOLT", role: "SCAVENGER", color: "#8bdcff", weapon: "shotgun", health: 82, scavengeSkill: 88 },
+  { personId: "person-03", name: "REYES", role: "RANGER", color: "#55d5ff", weapon: "rifle", health: 88, scavengeSkill: 44 },
+  { personId: "person-04", name: "FINCH", role: "ENGINEER", color: "#9eeaff", weapon: "carbine", health: 76, scavengeSkill: 58 },
 ];
 
 const defaultSetup: TacticalSetup = {
@@ -23,9 +23,9 @@ const weaponReloadTime: Record<Unit["weapon"], number> = { rifle: 2.4, shotgun: 
 const roleSpeed: Record<Unit["role"], number> = { MEDIC: 2.35, SCAVENGER: 2.2, RANGER: 2.4, ENGINEER: 2.25 };
 
 const contactSpawns: Vec2[] = [
-  { x: 48.5, y: 4.5 }, { x: 46.5, y: 6.5 }, { x: 49.2, y: 8.4 },
-  { x: 48.2, y: 15.5 }, { x: 45.4, y: 18.8 }, { x: 48.3, y: 23.4 },
-  { x: 42.4, y: 24.2 }, { x: 36.1, y: 8.4 },
+  { x: 56.5, y: 4.5 }, { x: 53.5, y: 7.5 }, { x: 56.2, y: 12.4 },
+  { x: 55.2, y: 19.5 }, { x: 51.4, y: 28.8 }, { x: 47.3, y: 34.4 },
+  { x: 34.4, y: 4.2 }, { x: 20.1, y: 4.4 },
 ];
 
 export class Simulation {
@@ -45,7 +45,10 @@ export class Simulation {
     const map = createFacilityMap();
     const columns = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(this.setup.units.length))));
     const units = this.setup.units.map((template, index): Unit => {
-      const pos = { x: 5.4 + (index % columns) * 0.9, y: 27.2 + Math.floor(index / columns) * 0.85 };
+      const pos = {
+        x: map.extraction.x + (index % columns) * 0.95,
+        y: map.extraction.y - Math.floor(index / columns) * 0.95,
+      };
       const target = { ...pos };
       const maxAmmo = weaponMagazine[template.weapon];
       return {
@@ -53,6 +56,7 @@ export class Simulation {
         id: index + 1,
         facing: -Math.PI / 2,
         speed: roleSpeed[template.role],
+        moveSpeed: roleSpeed[template.role],
         ammo: maxAmmo,
         maxAmmo,
         reserveAmmo: weaponReserve[template.weapon],
@@ -61,6 +65,7 @@ export class Simulation {
         phase: index * 1.17,
         selected: index === 0,
         state: "holding",
+        interaction: null,
         shotFlash: 0,
         shotCooldown: index * 0.12,
         pos,
@@ -145,23 +150,77 @@ export class Simulation {
     for (const unit of this.state.units) unit.selected = true;
   }
 
+  public selectUnits(ids: number[], additive = false): void {
+    const selectedIds = new Set(ids);
+    for (const unit of this.state.units) {
+      if (additive) {
+        if (selectedIds.has(unit.id)) unit.selected = true;
+      } else unit.selected = selectedIds.has(unit.id);
+    }
+  }
+
   public issueMove(requestedTarget: Vec2): void {
     if (this.state.missionStatus !== "active") return;
     const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down");
     if (!selected.length) return;
+    const centroid = selected.reduce((sum, unit) => ({ x: sum.x + unit.pos.x, y: sum.y + unit.pos.y }), { x: 0, y: 0 });
+    centroid.x /= selected.length;
+    centroid.y /= selected.length;
+    const target = nearestWalkable(this.state.map, requestedTarget);
+    const length = Math.max(0.001, distance(centroid, target));
+    const forward = { x: (target.x - centroid.x) / length, y: (target.y - centroid.y) / length };
+    const right = { x: -forward.y, y: forward.x };
     const columns = Math.ceil(Math.sqrt(selected.length));
+    const rows = Math.ceil(selected.length / columns);
+    const formationSpeed = Math.min(...selected.map((unit) => unit.speed));
     selected.forEach((unit, index) => {
-      const offset = {
-        x: ((index % columns) - (columns - 1) / 2) * 0.85,
-        y: (Math.floor(index / columns) - 0.35) * 0.85,
-      };
-      const target = nearestWalkable(this.state.map, { x: requestedTarget.x + offset.x, y: requestedTarget.y + offset.y });
-      unit.target = target;
-      unit.path = findPath(this.state.map, unit.pos, target);
-      unit.state = "moving";
+      const row = Math.floor(index / columns);
+      const membersInRow = Math.min(columns, selected.length - row * columns);
+      const lateral = (index % columns) - (membersInRow - 1) / 2;
+      const depth = row - (rows - 1) / 2;
+      const slot = nearestWalkable(this.state.map, {
+        x: target.x + right.x * lateral * 1.2 - forward.x * depth * 1.05,
+        y: target.y + right.y * lateral * 1.2 - forward.y * depth * 1.05,
+      });
+      unit.target = slot;
+      unit.path = findPath(this.state.map, unit.pos, slot);
+      unit.state = unit.path.length ? "moving" : "holding";
+      unit.interaction = null;
+      unit.moveSpeed = selected.length > 1 ? formationSpeed : unit.speed;
       unit.reloadTimer = 0;
     });
     this.pushEvent("COMMAND", `${selected.length > 1 ? "Squad" : selected[0].name} retasked to waypoint.`, "normal");
+  }
+
+  public issueScavenge(): Unit | null {
+    if (this.state.missionStatus !== "active" || this.state.cacheSecured) return null;
+    const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down");
+    if (!selected.length) return null;
+    const operator = [...selected].sort((a, b) => b.scavengeSkill - a.scavengeSkill || a.id - b.id)[0];
+    const cacheTarget = nearestWalkable(this.state.map, this.state.map.cache);
+    operator.target = cacheTarget;
+    operator.path = findPath(this.state.map, operator.pos, cacheTarget);
+    operator.state = operator.path.length ? "moving" : "collecting";
+    operator.interaction = "cache";
+    operator.moveSpeed = operator.speed;
+    operator.reloadTimer = 0;
+
+    const defenders = selected.filter((unit) => unit !== operator);
+    defenders.forEach((unit, index) => {
+      const angle = -Math.PI * 0.7 + (index / Math.max(1, defenders.length - 1)) * Math.PI * 1.4;
+      const defendTarget = nearestWalkable(this.state.map, {
+        x: this.state.map.cache.x + Math.cos(angle) * 2.7,
+        y: this.state.map.cache.y + Math.sin(angle) * 2.7,
+      });
+      unit.target = defendTarget;
+      unit.path = findPath(this.state.map, unit.pos, defendTarget);
+      unit.state = unit.path.length ? "moving" : "holding";
+      unit.interaction = null;
+      unit.moveSpeed = Math.min(...selected.map((member) => member.speed));
+      unit.reloadTimer = 0;
+    });
+    this.pushEvent("COMMAND", `${operator.name} assigned to scavenge; ${defenders.length || "no"} defender${defenders.length === 1 ? "" : "s"} covering.`, "good");
+    return operator;
   }
 
   public issueHold(): void {
@@ -171,6 +230,8 @@ export class Simulation {
       unit.path = [];
       unit.target = { ...unit.pos };
       unit.state = "holding";
+      unit.interaction = null;
+      unit.moveSpeed = unit.speed;
     }
     if (selected.length) this.pushEvent("COMMAND", `${selected.length > 1 ? "Squad" : selected[0].name} holding position.`, "normal");
   }
@@ -280,11 +341,11 @@ export class Simulation {
       if (unit.path.length) {
         const waypoint = unit.path[0];
         unit.facing = angleTo(unit.pos, waypoint);
-        unit.pos = moveTowards(unit.pos, waypoint, unit.speed * dt);
-        unit.phase += dt * unit.speed * 4.8;
+        unit.pos = moveTowards(unit.pos, waypoint, unit.moveSpeed * dt);
+        unit.phase += dt * unit.moveSpeed * 4.8;
         unit.state = "moving";
         if (distance(unit.pos, waypoint) < 0.06) unit.path.shift();
-      } else if (distance(unit.pos, this.state.map.cache) < 2.1 && !this.state.cacheSecured) {
+      } else if (unit.interaction === "cache" && distance(unit.pos, this.state.map.cache) < 2.1 && !this.state.cacheSecured) {
         unit.state = "collecting";
         unit.facing = angleTo(unit.pos, this.state.map.cache);
       } else if (unit.state === "moving") unit.state = "holding";
@@ -358,6 +419,7 @@ export class Simulation {
         if (target.health <= 0 && target.state !== "down") {
           target.state = "down";
           target.path = [];
+          target.interaction = null;
           this.pushEvent(target.name, "Unit down. Signal remains active.", "warning");
         }
       }
@@ -366,15 +428,22 @@ export class Simulation {
 
   private updateCache(dt: number): void {
     if (this.state.cacheSecured) return;
-    const collectors = this.state.units.filter((unit) => unit.state === "collecting").length;
-    if (collectors > 0) this.state.cacheProgress = clamp(this.state.cacheProgress + dt * (0.028 + collectors * 0.017), 0, 1);
+    const collector = this.state.units.find((unit) =>
+      unit.state === "collecting"
+      && unit.interaction === "cache"
+      && distance(unit.pos, this.state.map.cache) < 2.1,
+    );
+    if (collector) this.state.cacheProgress = clamp(this.state.cacheProgress + dt * (0.026 + collector.scavengeSkill * 0.00042), 0, 1);
     if (this.state.cacheProgress >= 1) {
       this.state.cacheSecured = true;
-      for (const unit of this.state.units) if (unit.state === "collecting") unit.state = "holding";
+      for (const unit of this.state.units) {
+        if (unit.state === "collecting") unit.state = "holding";
+        if (unit.interaction === "cache") unit.interaction = null;
+      }
       this.pushEvent("SQUAD", "Objective secured. Return to extraction.", "good");
     } else if (this.state.cacheProgress > 0.45 && !this.cacheAnnounced) {
       this.cacheAnnounced = true;
-      this.pushEvent("HOLT", "Cache transfer at fifty percent.", "good");
+      this.pushEvent(collector?.name ?? "SQUAD", "Cache transfer at fifty percent.", "good");
     }
   }
 
@@ -382,6 +451,8 @@ export class Simulation {
     unit.path = [];
     unit.target = { ...unit.pos };
     unit.state = "reloading";
+    unit.interaction = null;
+    unit.moveSpeed = unit.speed;
     unit.reloadTimer = weaponReloadTime[unit.weapon];
   }
 }

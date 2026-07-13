@@ -91,6 +91,9 @@ button { font: inherit; color: inherit; }
 #game-canvas, #gl-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 #gl-canvas { pointer-events: none; opacity: 1; }
 #game-canvas { cursor: crosshair; }
+#game-canvas.panning { cursor: grabbing; }
+.selection-box { position: absolute; z-index: 6; display: none; border: 1px solid rgba(var(--accent-rgb),.95); background: rgba(var(--accent-rgb),.13); box-shadow: 0 0 18px rgba(var(--accent-rgb),.16); pointer-events: none; }
+.selection-box.active { display: block; }
 .viewport-corners i { position: absolute; width: 22px; height: 22px; border-color: rgba(var(--accent-rgb), .42); pointer-events: none; }
 .viewport-corners i:nth-child(1) { top: 10px; left: 10px; border-top: 1px solid; border-left: 1px solid; }
 .viewport-corners i:nth-child(2) { top: 10px; right: 10px; border-top: 1px solid; border-right: 1px solid; }
@@ -175,4 +178,52 @@ button { font: inherit; color: inherit; }
   .brand { font-size: 20px; }
   .panel-section { padding: 11px 9px; }
   .unit-card { grid-template-columns: 48px 1fr; }
+}
+
+/* Tactical legibility pass: the repeater UI is information-dense, but it must
+   remain readable at a normal seated distance on a 1280×720 display. */
+.shell { grid-template-rows: 72px minmax(0, 1fr) 96px; }
+.topbar { grid-template-columns: minmax(250px,.9fr) minmax(230px,.72fr) minmax(300px,1.15fr) minmax(250px,.8fr); }
+.topbar > div { padding-inline: 17px; }
+.mission-block .eyebrow { font-size: 11px; }
+.section-title small { font-size: 10px; }
+.mission-block strong { font-size: 14px; }
+.threat-block { font-size: 13px; }
+.status-block { font-size: 12px; }
+.workarea { grid-template-columns: 264px minmax(0, 1fr) 292px; }
+.right-panel { grid-template-rows: 48px minmax(0,1fr) 88px; }
+.panel-section { padding: 14px 13px; }
+.section-title { font-size: 11px; }
+.objective strong { font-size: 12px; }
+.objective small { color: #91a7ad; font-size: 11px; line-height: 1.45; }
+.extract-button { min-height: 38px; font-size: 10px; }
+.order-button { min-height: 50px; }
+.order-button kbd { width: 34px; font-size: 10px; }
+.order-button b { font-size: 11px; }
+.order-button small { color: #859ba1; font-size: 10px; }
+.pipeline-card small, .pipeline-state, .sensor-readout { font-size: 9px; }
+.feed-label b, .feed-label small { font-size: 10px; }
+.zoom-readout button { width: 34px; height: 34px; font-size: 17px; }
+.zoom-readout span { min-width: 60px; font-size: 11px; }
+.retask-hint { font-size: 10px; }
+.performance-hud small { font-size: 9px; }
+.performance-hud b { font-size: 11px; }
+.tactical-unit-cards { grid-auto-rows: minmax(102px, 1fr); }
+.unit-heading b { font-size: 13px; }
+.unit-heading small { font-size: 10px; }
+.unit-meta, .unit-order { font-size: 10px; }
+.squad-summary span { font-size: 10px; }
+.squad-summary b { font-size: 13px; }
+.event-heading { font-size: 11px; }
+.event-heading small, .event time { font-size: 10px; }
+.event span { color: #8ea2a7; font-size: 10px; }
+.operation-id small { font-size: 8px; }
+.operation-id b { font-size: 9px; }
+.mission-result > div > small { font-size: 10px; }
+.mission-result p { font-size: 11px; }
+.mission-result section small { font-size: 9px; }
+
+@media (max-width: 1200px) {
+  .workarea { grid-template-columns: 240px minmax(0,1fr) 265px; }
+  .topbar { grid-template-columns: 240px 210px 1fr 225px; }
 }

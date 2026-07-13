@@ -137,6 +137,7 @@ export class GpuLidarRenderer {
   private readonly staticData: Float32Array;
   private readonly contacts: BenchmarkContact[];
   private readonly benchmarkMode: boolean;
+  private readonly sectorCount: number;
   private readonly unitModels = new Map<number, LocalPoint[]>();
   private readonly liveContactModels = new Map<number, LocalPoint[]>();
   private dynamicData = new Float32Array(CONTACT_COUNT * 180 * STRIDE_FLOATS);
@@ -148,8 +149,9 @@ export class GpuLidarRenderer {
   constructor(canvas: HTMLCanvasElement, map: FacilityMap, options: GpuLidarOptions = {}) {
     this.map = map;
     this.benchmarkMode = options.benchmarkContacts ?? false;
-    this.virtualMap = { ...map, width: map.width * QUADRANTS, height: map.height * QUADRANTS };
-    this.displayOffset = { x: map.width, y: 0 };
+    this.sectorCount = this.benchmarkMode ? QUADRANTS : 1;
+    this.virtualMap = { ...map, width: map.width * this.sectorCount, height: map.height * this.sectorCount };
+    this.displayOffset = this.benchmarkMode ? { x: map.width, y: 0 } : { x: 0, y: 0 };
     const gl = canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,
@@ -187,11 +189,20 @@ export class GpuLidarRenderer {
   }
 
   public toSimulationWorld(point: Vec2): Vec2 {
+    if (!this.benchmarkMode) return { x: point.x, y: point.y };
     const wrapped = {
       x: ((point.x - this.displayOffset.x) % this.map.width + this.map.width) % this.map.width,
       y: ((point.y - this.displayOffset.y) % this.map.height + this.map.height) % this.map.height,
     };
     return wrapped;
+  }
+
+  public toDisplayPoint(point: Vec2): Vec2 {
+    return this.offsetPoint(point);
+  }
+
+  public previewTransform(width: number, height: number, camera: Camera): IsoTransform {
+    return makeIsoTransform(width, height, this.virtualMap, camera);
   }
 
   public render(width: number, height: number, pixelRatio: number, state: SimulationState, camera: Camera): void {
@@ -261,8 +272,8 @@ export class GpuLidarRenderer {
     const wallColor: readonly [number, number, number] = [0.28, 0.66, 0.76];
     const propColor: readonly [number, number, number] = [0.22, 0.52, 0.60];
     const walkable = [...this.map.walkable].map((cell) => cell.split(",").map(Number) as [number, number]);
-    for (let quadrantY = 0; quadrantY < QUADRANTS; quadrantY += 1) {
-      for (let quadrantX = 0; quadrantX < QUADRANTS; quadrantX += 1) {
+    for (let quadrantY = 0; quadrantY < this.sectorCount; quadrantY += 1) {
+      for (let quadrantX = 0; quadrantX < this.sectorCount; quadrantX += 1) {
         const offsetX = quadrantX * this.map.width;
         const offsetY = quadrantY * this.map.height;
         const sectorSeed = quadrantY * QUADRANTS + quadrantX;
@@ -318,8 +329,8 @@ export class GpuLidarRenderer {
     const contacts: BenchmarkContact[] = [];
     for (let index = 0; index < CONTACT_COUNT; index += 1) {
       const cell = cells[Math.floor(random() * cells.length)];
-      const quadrantX = index % 4 === 0 ? 1 : Math.floor(random() * QUADRANTS);
-      const quadrantY = Math.floor(random() * QUADRANTS);
+      const quadrantX = index % 4 === 0 ? 1 : Math.floor(random() * this.sectorCount);
+      const quadrantY = Math.floor(random() * this.sectorCount);
       contacts.push({
         origin: {
           x: cell[0] + 0.5 + quadrantX * this.map.width,
@@ -478,9 +489,10 @@ export class GpuLidarRenderer {
   }
 
   private drawSectorLabels(ctx: CanvasRenderingContext2D, transform: IsoTransform): void {
+    if (this.sectorCount === 1) return;
     ctx.save(); ctx.font = `700 ${Math.max(8, transform.tileW * 0.75)}px monospace`; ctx.textAlign = "center";
-    for (let y = 0; y < QUADRANTS; y += 1) {
-      for (let x = 0; x < QUADRANTS; x += 1) {
+    for (let y = 0; y < this.sectorCount; y += 1) {
+      for (let x = 0; x < this.sectorCount; x += 1) {
         const center = transform.toScreen({ x: (x + 0.5) * this.map.width, y: (y + 0.5) * this.map.height }, 0.02);
         ctx.fillStyle = "rgba(104,188,210,.22)";
         ctx.fillText(`SECTOR ${String.fromCharCode(65 + y * QUADRANTS + x)}`, center.x, center.y);

@@ -1,9 +1,10 @@
-import { formatTime } from "../math";
+import { distance, formatTime } from "../math";
 import { GpuLidarRenderer } from "../renderers/gpu-lidar";
 import { LidarRenderer } from "../renderers/lidar";
+import { makeIsoTransform } from "../renderers/shared";
 import { Simulation } from "../sim";
 import type { Deployment, MissionOutcome } from "../campaign/types";
-import type { Camera, TacticalOutcome, Unit } from "../types";
+import type { Camera, TacticalOutcome, Unit, Vec2 } from "../types";
 
 interface TacticalScreenHandlers {
   onResolve(outcome: MissionOutcome): void;
@@ -15,6 +16,13 @@ const roleIcon: Record<Unit["role"], string> = {
   SCAVENGER: "▣",
   RANGER: "⌁",
   ENGINEER: "△",
+};
+
+const baseScavengeSkill: Record<Unit["role"], number> = {
+  MEDIC: 32,
+  SCAVENGER: 82,
+  RANGER: 42,
+  ENGINEER: 56,
 };
 
 const escapeHtml = (value: string): string => value
@@ -42,6 +50,7 @@ export const mountTacticalScreen = (
       color: person.color,
       weapon: person.weapon,
       health: Math.max(45, 100 + person.injuries.filter((injury) => injury.stat === "health").reduce((sum, injury) => sum + injury.modifier * 100, 0)),
+      scavengeSkill: Math.min(99, baseScavengeSkill[person.role] + Math.min(14, person.career.missions * 2)),
     })),
   });
 
@@ -58,7 +67,7 @@ export const mountTacticalScreen = (
         <aside class="left-panel panel">
           <section class="panel-section objective-section">
             <div class="section-title"><span>OBJECTIVE</span><small>${deployment.offer.risk}</small></div>
-            <div class="objective active"><span class="objective-icon">◇</span><div><strong>CACHE TRANSFER <b id="cache-fraction">0%</b></strong><small id="cache-copy">${escapeHtml(deployment.offer.objective)}</small></div></div>
+            <div class="objective active"><span class="objective-icon">◇</span><div><strong>CACHE TRANSFER <b id="cache-fraction">0%</b></strong><small id="cache-copy">Right-click the cache to assign the best scavenger</small></div></div>
             <div class="progress"><i id="cache-progress"></i></div>
             <div class="objective ready"><span class="objective-icon">⌂</span><div><strong id="extraction-heading">EXTRACTION MARKED</strong><small id="extraction-copy">Return every standing survivor to the marked zone</small></div></div>
             <button class="extract-button" id="extract-button" type="button">CALL EXTRACTION</button>
@@ -66,7 +75,7 @@ export const mountTacticalScreen = (
 
           <section class="panel-section order-section">
             <div class="section-title"><span>HIGH LEVEL ORDERS</span><small id="selected-count">1 UNIT</small></div>
-            <button class="order-button primary" id="move-order" type="button"><kbd>M</kbd><span><b>MOVE / RETASK</b><small>Click the tactical feed</small></span></button>
+            <button class="order-button primary" id="move-order" type="button"><kbd>RMB</kbd><span><b>MOVE / INTERACT</b><small>Right-click ground or cache</small></span></button>
             <button class="order-button" id="hold-order" type="button"><kbd>H</kbd><span><b>HOLD POSITION</b><small>Stop and engage</small></span></button>
             <button class="order-button" id="reload-order" type="button"><kbd>R</kbd><span><b>RELOAD</b><small>Stationary until complete</small></span></button>
             <button class="order-button" id="select-all" type="button"><kbd>A</kbd><span><b>SELECT SQUAD</b><small>Retask as formation</small></span></button>
@@ -81,11 +90,12 @@ export const mountTacticalScreen = (
 
         <section class="viewport-wrap">
           <canvas id="gl-canvas"></canvas><canvas id="game-canvas"></canvas>
+          <div class="selection-box" id="selection-box"></div>
           <div class="viewport-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
-          <div class="retask-hint" id="retask-hint">CLICK MAP TO RETASK SELECTED UNIT</div>
+          <div class="retask-hint" id="retask-hint">DRAG SELECT · RIGHT-CLICK MOVE / SCAVENGE · MIDDLE-DRAG PAN</div>
           <div class="performance-hud" id="performance-hud">
             <span><small>FPS</small><b id="perf-fps">--</b></span><span><small>STATIC PTS</small><b id="perf-static">--</b></span><span><small>DYNAMIC PTS</small><b id="perf-dynamic">--</b></span><span><small>CONTACTS</small><b id="perf-contacts">--</b></span><span><small>DRAW CALLS</small><b id="perf-draws">2</b></span>
           </div>
@@ -108,7 +118,7 @@ export const mountTacticalScreen = (
   if (!context) throw new Error("Canvas 2D is unavailable");
   const lidar = new LidarRenderer();
   const gpuLidar = new GpuLidarRenderer(glCanvas, simulation.state.map, { benchmarkContacts: benchmarkMode });
-  const camera: Camera = { zoom: 1.1, panX: 0, panY: 0 };
+  const camera: Camera = { zoom: 0.94, panX: 0, panY: 0 };
   let cssWidth = 1;
   let cssHeight = 1;
   let lastFrame = performance.now();
@@ -116,6 +126,8 @@ export const mountTacticalScreen = (
   let lastUiUpdate = 0;
   let animationFrame = 0;
   let resolved = false;
+  let selectionDrag: { start: Vec2; current: Vec2; additive: boolean } | null = null;
+  let panDrag: { start: Vec2; panX: number; panY: number } | null = null;
 
   const get = <T extends HTMLElement>(selector: string): T => {
     const element = root.querySelector<T>(selector);
@@ -138,11 +150,11 @@ export const mountTacticalScreen = (
   const renderUnitCards = (): void => {
     const container = get<HTMLDivElement>("#unit-cards");
     container.innerHTML = simulation.state.units.map((unit) => {
-      const order = unit.state === "collecting" ? "SECURING OBJECTIVE" : unit.state === "moving" ? "MOVING — WEAPONS LIMITED" : unit.state === "reloading" ? `RELOADING · ${Math.max(0, unit.reloadTimer).toFixed(1)}S` : unit.state === "down" ? "INCAPACITATED · LINK ACTIVE" : "HOLDING · ENGAGING";
+      const order = unit.state === "collecting" ? "SCAVENGING — DEFENCE REDUCED" : unit.state === "moving" ? "MOVING IN FORMATION — WEAPONS LIMITED" : unit.state === "reloading" ? `RELOADING · ${Math.max(0, unit.reloadTimer).toFixed(1)}S` : unit.state === "down" ? "INCAPACITATED · LINK ACTIVE" : "HOLDING · ENGAGING";
       return `
         <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
           <span class="unit-index">${unit.id}</span><span class="unit-silhouette role-${unit.role.toLowerCase()}"><i>${roleIcon[unit.role]}</i></span>
-          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>▥ ${unit.ammo}+${unit.reserveAmmo}</span><span>⚡ ${Math.round(unit.stress)}</span></span><span class="unit-order">${order}</span></span>
+          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>▥ ${unit.ammo}+${unit.reserveAmmo}</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
         </button>
       `;
     }).join("");
@@ -156,7 +168,7 @@ export const mountTacticalScreen = (
     get("#contact-count").textContent = livingContacts.toString().padStart(2, "0");
     get("#signal-value").textContent = `${Math.round(89 + Math.sin(state.signalPulse * .8) * 4)}%`;
     get("#cache-fraction").textContent = state.cacheSecured ? "SECURED" : `${Math.round(state.cacheProgress * 100)}%`;
-    get("#cache-copy").textContent = state.cacheSecured ? "Objective complete. Withdraw the squad." : state.cacheProgress > 0 ? "Survivors transferring supplies; defensive output reduced" : state.objectiveLabel;
+    get("#cache-copy").textContent = state.cacheSecured ? "Objective complete. Withdraw the squad." : state.cacheProgress > 0 ? "Assigned scavenger transferring supplies; squad covering" : "Right-click the cache to assign the best scavenger";
     get("#cache-progress").style.width = `${state.cacheProgress * 100}%`;
     get("#timecode").textContent = formatTime(state.elapsed);
     get("#zoom-value").textContent = `${Math.round(camera.zoom * 100)}%`;
@@ -219,39 +231,161 @@ export const mountTacticalScreen = (
     hint.classList.toggle("attention", attention);
   };
 
+  const canvasPoint = (event: PointerEvent | MouseEvent | WheelEvent): Vec2 => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+
+  const currentTransform = () => gpuLidar.available
+    ? gpuLidar.transform
+    : lidar.transform;
+
+  const toSimulationWorld = (screenPoint: Vec2): Vec2 | null => {
+    const transform = currentTransform();
+    if (!transform) return null;
+    const displayPoint = transform.toWorld(screenPoint);
+    return gpuLidar.available ? gpuLidar.toSimulationWorld(displayPoint) : displayPoint;
+  };
+
+  const unitScreenPoint = (unit: Unit): Vec2 | null => {
+    const transform = currentTransform();
+    if (!transform) return null;
+    return transform.toScreen(gpuLidar.available ? gpuLidar.toDisplayPoint(unit.pos) : unit.pos, 0.5);
+  };
+
+  const zoomAt = (screenPoint: Vec2, requestedZoom: number): void => {
+    const transform = currentTransform();
+    if (!transform) return;
+    const displayPoint = transform.toWorld(screenPoint);
+    camera.zoom = Math.max(0.62, Math.min(3.4, requestedZoom));
+    const nextTransform = gpuLidar.available
+      ? gpuLidar.previewTransform(cssWidth, cssHeight, camera)
+      : makeIsoTransform(cssWidth, cssHeight, simulation.state.map, camera);
+    const movedPoint = nextTransform.toScreen(displayPoint);
+    camera.panX += screenPoint.x - movedPoint.x;
+    camera.panY += screenPoint.y - movedPoint.y;
+  };
+
+  const updateSelectionBox = (): void => {
+    const box = get<HTMLDivElement>("#selection-box");
+    if (!selectionDrag) { box.classList.remove("active"); return; }
+    const left = Math.min(selectionDrag.start.x, selectionDrag.current.x);
+    const top = Math.min(selectionDrag.start.y, selectionDrag.current.y);
+    box.style.left = `${left}px`;
+    box.style.top = `${top}px`;
+    box.style.width = `${Math.abs(selectionDrag.current.x - selectionDrag.start.x)}px`;
+    box.style.height = `${Math.abs(selectionDrag.current.y - selectionDrag.start.y)}px`;
+    box.classList.add("active");
+  };
+
+  const pointerDownHandler = (event: PointerEvent): void => {
+    if (event.button === 0) {
+      selectionDrag = { start: canvasPoint(event), current: canvasPoint(event), additive: event.shiftKey };
+      canvas.setPointerCapture(event.pointerId);
+      updateSelectionBox();
+    } else if (event.button === 1) {
+      event.preventDefault();
+      panDrag = { start: canvasPoint(event), panX: camera.panX, panY: camera.panY };
+      canvas.setPointerCapture(event.pointerId);
+      canvas.classList.add("panning");
+    }
+  };
+
+  const pointerMoveHandler = (event: PointerEvent): void => {
+    const point = canvasPoint(event);
+    if (selectionDrag) {
+      selectionDrag.current = point;
+      updateSelectionBox();
+    }
+    if (panDrag) {
+      camera.panX = panDrag.panX + point.x - panDrag.start.x;
+      camera.panY = panDrag.panY + point.y - panDrag.start.y;
+    }
+  };
+
+  const pointerUpHandler = (event: PointerEvent): void => {
+    if (event.button === 0 && selectionDrag) {
+      const drag = selectionDrag;
+      const width = Math.abs(drag.current.x - drag.start.x);
+      const height = Math.abs(drag.current.y - drag.start.y);
+      const left = Math.min(drag.start.x, drag.current.x);
+      const right = Math.max(drag.start.x, drag.current.x);
+      const top = Math.min(drag.start.y, drag.current.y);
+      const bottom = Math.max(drag.start.y, drag.current.y);
+      const selectedIds = simulation.state.units.filter((unit) => {
+        const point = unitScreenPoint(unit);
+        if (!point) return false;
+        if (width < 5 && height < 5) return distance(point, drag.current) < 18;
+        return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
+      }).map((unit) => unit.id);
+      simulation.selectUnits(selectedIds, drag.additive);
+      showHint(selectedIds.length ? `${selectedIds.length} UNIT${selectedIds.length === 1 ? "" : "S"} SELECTED` : "SELECTION CLEARED", false);
+      selectionDrag = null;
+      updateSelectionBox();
+    }
+    if (event.button === 1 && panDrag) {
+      panDrag = null;
+      canvas.classList.remove("panning");
+    }
+  };
+
+  const contextMenuHandler = (event: MouseEvent): void => {
+    event.preventDefault();
+    const worldPoint = toSimulationWorld(canvasPoint(event));
+    if (!worldPoint) return;
+    if (distance(worldPoint, simulation.state.map.cache) < 2.8 && !simulation.state.cacheSecured) {
+      const operator = simulation.issueScavenge();
+      showHint(operator ? `${operator.name} SCAVENGING · SQUAD COVERING` : "SELECT A STANDING UNIT", !operator);
+    } else {
+      simulation.issueMove(worldPoint);
+      showHint("FORMATION MOVE ORDER TRANSMITTED", false);
+    }
+  };
+
+  const pointerCancelHandler = (event: PointerEvent): void => {
+    selectionDrag = null;
+    panDrag = null;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    canvas.classList.remove("panning");
+    updateSelectionBox();
+  };
+
+  const wheelHandler = (event: WheelEvent): void => {
+    event.preventDefault();
+    zoomAt(canvasPoint(event), camera.zoom * (event.deltaY > 0 ? .86 : 1.16));
+  };
+
   const keyHandler = (event: KeyboardEvent): void => {
     if (event.key === " ") { event.preventDefault(); simulation.togglePause(); }
     else if (event.key.toLowerCase() === "a") simulation.selectAll();
     else if (event.key.toLowerCase() === "h") simulation.issueHold();
     else if (event.key.toLowerCase() === "r") simulation.issueReload();
     else if (/^[1-9]$/.test(event.key)) simulation.selectUnit(Number(event.key));
+    else if (event.key === "ArrowLeft") camera.panX += 42;
+    else if (event.key === "ArrowRight") camera.panX -= 42;
+    else if (event.key === "ArrowUp") camera.panY += 42;
+    else if (event.key === "ArrowDown") camera.panY -= 42;
+    else if (event.key === "+" || event.key === "=") zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom * 1.18);
+    else if (event.key === "-") zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom / 1.18);
   };
 
   get<HTMLButtonElement>("#pause-button").addEventListener("click", () => simulation.togglePause());
   get<HTMLButtonElement>("#hold-order").addEventListener("click", () => simulation.issueHold());
   get<HTMLButtonElement>("#reload-order").addEventListener("click", () => simulation.issueReload());
   get<HTMLButtonElement>("#select-all").addEventListener("click", () => simulation.selectAll());
-  get<HTMLButtonElement>("#move-order").addEventListener("click", () => showHint("CLICK MAP TO RETASK SELECTED UNIT"));
+  get<HTMLButtonElement>("#move-order").addEventListener("click", () => showHint("RIGHT-CLICK GROUND TO MOVE · RIGHT-CLICK CACHE TO SCAVENGE"));
   get<HTMLButtonElement>("#extract-button").addEventListener("click", () => {
     try { showResult(simulation.extract()); }
     catch (error) { showHint(error instanceof Error ? error.message.toUpperCase() : "EXTRACTION NOT READY"); }
   });
-  get<HTMLButtonElement>("#zoom-in").addEventListener("click", () => { camera.zoom = Math.min(1.32, camera.zoom + .08); });
-  get<HTMLButtonElement>("#zoom-out").addEventListener("click", () => { camera.zoom = Math.max(.68, camera.zoom - .08); });
-  canvas.addEventListener("click", (event) => {
-    const rect = canvas.getBoundingClientRect();
-    const screenPoint = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    const transform = gpuLidar.available ? gpuLidar.transform : lidar.transform;
-    if (transform) {
-      const worldPoint = transform.toWorld(screenPoint);
-      simulation.issueMove(gpuLidar.available ? gpuLidar.toSimulationWorld(worldPoint) : worldPoint);
-    }
-    showHint("ORDER TRANSMITTED", false);
-  });
-  canvas.addEventListener("wheel", (event) => {
-    event.preventDefault();
-    camera.zoom = Math.max(.68, Math.min(1.32, camera.zoom * (event.deltaY > 0 ? .93 : 1.07)));
-  }, { passive: false });
+  get<HTMLButtonElement>("#zoom-in").addEventListener("click", () => zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom * 1.22));
+  get<HTMLButtonElement>("#zoom-out").addEventListener("click", () => zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom / 1.22));
+  canvas.addEventListener("pointerdown", pointerDownHandler);
+  canvas.addEventListener("pointermove", pointerMoveHandler);
+  canvas.addEventListener("pointerup", pointerUpHandler);
+  canvas.addEventListener("pointercancel", pointerCancelHandler);
+  canvas.addEventListener("contextmenu", contextMenuHandler);
+  canvas.addEventListener("wheel", wheelHandler, { passive: false });
   window.addEventListener("keydown", keyHandler);
   const resizeObserver = new ResizeObserver(resizeCanvas);
   resizeObserver.observe(canvas);
@@ -266,5 +400,11 @@ export const mountTacticalScreen = (
     cancelAnimationFrame(animationFrame);
     resizeObserver.disconnect();
     window.removeEventListener("keydown", keyHandler);
+    canvas.removeEventListener("pointerdown", pointerDownHandler);
+    canvas.removeEventListener("pointermove", pointerMoveHandler);
+    canvas.removeEventListener("pointerup", pointerUpHandler);
+    canvas.removeEventListener("pointercancel", pointerCancelHandler);
+    canvas.removeEventListener("contextmenu", contextMenuHandler);
+    canvas.removeEventListener("wheel", wheelHandler);
   };
 };

@@ -15,8 +15,10 @@ mission consequences and the living outpost command schematic.
 - Rotating mission board with explicit risk, rewards and expiry.
 - Rolling squad deployment with ammunition and opportunity costs rather than a
   fixed mission or squad cap.
-- WebGL2 Ghostlink mission view with approximately 122,000 environment points,
-  live contacts and two point-cloud draw calls.
+- WebGL2 Ghostlink mission view with a single readable operation floor,
+  approximately 29,000 environment points, live contacts and two point-cloud
+  draw calls. The replicated stress fixture remains available with
+  `?benchmark=1`.
 - Automatic combat, routed movement, stationary reloads, objective collection
   and extraction.
 - Mission resolution, injuries, MIA/death states, rescue offers and delayed
@@ -46,11 +48,16 @@ Vite build used by continuous integration.
 
 ## Tactical controls
 
-- Click the tactical map to move selected survivors.
-- Click squad cards or press a survivor's number to select them.
-- Shift-click squad cards for multi-selection, or press `A` to select everyone.
+- Drag on the tactical map to box-select survivors. Shift-drag adds to the
+  current selection.
+- Click squad cards or press a survivor's number to select them. Shift-click
+  cards for multi-selection, or press `A` to select everyone.
+- Right-click the floor to move selected survivors in formation.
+- Right-click the marked cache to assign the selected survivor with the best
+  scavenging skill; everyone else moves close to cover them.
 - Press `H` to hold, `R` to reload in place, and `Space` to pause.
-- Use the mouse wheel or on-screen controls to zoom.
+- Use the mouse wheel, `+` / `-`, or the on-screen controls to zoom. Middle-drag
+  or use the arrow keys to pan while zoomed in.
 - Secure the marked cache, return every standing survivor to the extraction
   zone, then call extraction.
 

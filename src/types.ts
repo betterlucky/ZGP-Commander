@@ -18,6 +18,8 @@ export interface Unit {
   path: Vec2[];
   facing: number;
   speed: number;
+  moveSpeed: number;
+  scavengeSkill: number;
   health: number;
   ammo: number;
   maxAmmo: number;
@@ -27,6 +29,7 @@ export interface Unit {
   phase: number;
   selected: boolean;
   state: UnitState;
+  interaction: "cache" | null;
   weapon: "rifle" | "shotgun" | "smg" | "carbine";
   shotFlash: number;
   shotCooldown: number;
@@ -120,6 +123,7 @@ export interface TacticalUnitSetup {
   color: string;
   weapon: Unit["weapon"];
   health: number;
+  scavengeSkill: number;
 }
 
 export interface TacticalSetup {
