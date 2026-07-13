@@ -9,11 +9,13 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "check": "npm run build",
+    "test": "vitest run",
+    "check": "npm run test && npm run build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.10"
   }
 }

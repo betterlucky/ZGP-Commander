@@ -5,20 +5,26 @@ around a remote sensor presentation. The player develops a persistent survivor
 roster, runs order-based missions with automatic combat, and accepts clearly
 declared risks in a campaign where favourites are earned through survival.
 
-The repository currently contains the **Ghostlink performance prototype**. It
-proves the WebGL2 presentation at useful map and contact density; it is not yet
-the production simulation or campaign architecture.
+The repository contains a **playable campaign vertical slice**. It combines the
+Ghostlink tactical presentation with a persistent roster, rolling deployments,
+mission consequences and the living outpost command schematic.
 
-## Current prototype
+## Current slice
 
-- WebGL2 point-cloud renderer with a compatible Canvas fallback.
-- Four-sector facility benchmark.
-- Approximately 122,000 static environment points.
-- 100 animated contacts and four articulated survivor signatures.
-- Two WebGL draw calls for the point-cloud scene.
-- Routed movement, selection, collection state and incident reporting.
+- Persistent 12-person roster with tiers, roles, equipment and base jobs.
+- Rotating mission board with explicit risk, rewards and expiry.
+- Rolling squad deployment with ammunition and opportunity costs rather than a
+  fixed mission or squad cap.
+- WebGL2 Ghostlink mission view with approximately 122,000 environment points,
+  live contacts and two point-cloud draw calls.
+- Automatic combat, routed movement, stationary reloads, objective collection
+  and extraction.
+- Mission resolution, injuries, MIA/death states, rescue offers and delayed
+  field rewards.
+- End-of-day base production, recovery and expandable support capacity.
+- Versioned local browser save. `RESET CAMPAIGN` starts over.
 
-No image assets or runtime generative systems are required by the prototype.
+No image assets or runtime generative systems are required by the slice.
 
 ## Run locally
 
@@ -35,16 +41,18 @@ Use the local URL printed by Vite.
 npm run check
 ```
 
-`check` performs the strict TypeScript check and production Vite build used by
-continuous integration.
+`check` runs the campaign-rule tests, strict TypeScript check and production
+Vite build used by continuous integration.
 
-## Prototype controls
+## Tactical controls
 
 - Click the tactical map to move selected survivors.
-- Click squad cards or press `1`–`4` to select a survivor.
+- Click squad cards or press a survivor's number to select them.
 - Shift-click squad cards for multi-selection, or press `A` to select everyone.
-- Press `H` to hold, `Space` to pause, and `R` to reset.
+- Press `H` to hold, `R` to reload in place, and `Space` to pause.
 - Use the mouse wheel or on-screen controls to zoom.
+- Secure the marked cache, return every standing survivor to the extraction
+  zone, then call extraction.
 
 ## Project documentation
 

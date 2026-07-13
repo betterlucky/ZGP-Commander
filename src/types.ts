@@ -3,11 +3,12 @@ export interface Vec2 {
   y: number;
 }
 
-export type UnitState = "moving" | "holding" | "collecting" | "down";
+export type UnitState = "moving" | "holding" | "collecting" | "reloading" | "down";
 export type Role = "MEDIC" | "SCAVENGER" | "RANGER" | "ENGINEER";
 
 export interface Unit {
   id: number;
+  personId: string;
   name: string;
   role: Role;
   color: string;
@@ -20,6 +21,8 @@ export interface Unit {
   health: number;
   ammo: number;
   maxAmmo: number;
+  reserveAmmo: number;
+  reloadTimer: number;
   stress: number;
   phase: number;
   selected: boolean;
@@ -99,10 +102,42 @@ export interface SimulationState {
   cacheSecured: boolean;
   scanAngle: number;
   signalPulse: number;
+  missionTitle: string;
+  objectiveLabel: string;
+  riskLabel: string;
+  missionStatus: "active" | "success" | "failure";
+  contactsNeutralised: number;
   units: Unit[];
   contacts: Contact[];
   map: FacilityMap;
   events: EventEntry[];
+}
+
+export interface TacticalUnitSetup {
+  personId: string;
+  name: string;
+  role: Role;
+  color: string;
+  weapon: Unit["weapon"];
+  health: number;
+}
+
+export interface TacticalSetup {
+  missionTitle: string;
+  objectiveLabel: string;
+  riskLabel: string;
+  threat: number;
+  units: TacticalUnitSetup[];
+}
+
+export interface TacticalOutcome {
+  success: boolean;
+  objectiveCompleted: boolean;
+  extractedPersonIds: string[];
+  downPersonIds: string[];
+  healthByPersonId: Record<string, number>;
+  ammunitionRemaining: number;
+  contactsNeutralised: number;
 }
 
 export interface Camera {

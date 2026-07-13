@@ -1,27 +1,26 @@
 import { angleTo, clamp, distance, moveTowards, mulberry32 } from "./math";
 import { createFacilityMap, findPath, nearestWalkable } from "./map";
-import type { Contact, EventEntry, SimulationState, Unit, Vec2 } from "./types";
+import type { Contact, EventEntry, SimulationState, TacticalOutcome, TacticalSetup, TacticalUnitSetup, Unit, Vec2 } from "./types";
 
-const unitTemplates: Omit<Unit, "path" | "prev" | "target" | "pos">[] = [
-  { id: 1, name: "MAYA", role: "MEDIC", color: "#66e9ff", facing: 0, speed: 2.45, health: 94, ammo: 28, maxAmmo: 36, stress: 18, phase: 0.2, selected: true, state: "moving", weapon: "smg", shotFlash: 0, shotCooldown: 0 },
-  { id: 2, name: "HOLT", role: "SCAVENGER", color: "#8bdcff", facing: 0, speed: 2.15, health: 82, ammo: 7, maxAmmo: 12, stress: 28, phase: 1.7, selected: false, state: "moving", weapon: "shotgun", shotFlash: 0, shotCooldown: 0.4 },
-  { id: 3, name: "REYES", role: "RANGER", color: "#55d5ff", facing: 0, speed: 2.35, health: 88, ammo: 24, maxAmmo: 30, stress: 42, phase: 3.1, selected: false, state: "holding", weapon: "rifle", shotFlash: 0, shotCooldown: 0.2 },
-  { id: 4, name: "FINCH", role: "ENGINEER", color: "#9eeaff", facing: 0, speed: 2.25, health: 76, ammo: 31, maxAmmo: 40, stress: 37, phase: 4.8, selected: false, state: "holding", weapon: "carbine", shotFlash: 0, shotCooldown: 0.65 },
+const defaultUnitSetup: TacticalUnitSetup[] = [
+  { personId: "person-01", name: "MAYA", role: "MEDIC", color: "#66e9ff", weapon: "smg", health: 94 },
+  { personId: "person-02", name: "HOLT", role: "SCAVENGER", color: "#8bdcff", weapon: "shotgun", health: 82 },
+  { personId: "person-03", name: "REYES", role: "RANGER", color: "#55d5ff", weapon: "rifle", health: 88 },
+  { personId: "person-04", name: "FINCH", role: "ENGINEER", color: "#9eeaff", weapon: "carbine", health: 76 },
 ];
 
-const starts: Vec2[] = [
-  { x: 13.2, y: 6.2 },
-  { x: 12.7, y: 7.4 },
-  { x: 33.8, y: 15.6 },
-  { x: 34.8, y: 19.8 },
-];
+const defaultSetup: TacticalSetup = {
+  missionTitle: "Clinic Supply Run",
+  objectiveLabel: "Secure the medical cache and extract",
+  riskLabel: "RECOVERABLE",
+  threat: 0.52,
+  units: defaultUnitSetup,
+};
 
-const initialTargets: Vec2[] = [
-  { x: 9.4, y: 6.5 },
-  { x: 10.6, y: 7.4 },
-  { x: 34.3, y: 11.8 },
-  { x: 34.6, y: 18.6 },
-];
+const weaponMagazine: Record<Unit["weapon"], number> = { rifle: 24, shotgun: 8, smg: 30, carbine: 24 };
+const weaponReserve: Record<Unit["weapon"], number> = { rifle: 48, shotgun: 24, smg: 60, carbine: 48 };
+const weaponReloadTime: Record<Unit["weapon"], number> = { rifle: 2.4, shotgun: 3.2, smg: 2.1, carbine: 2.3 };
+const roleSpeed: Record<Unit["role"], number> = { MEDIC: 2.35, SCAVENGER: 2.2, RANGER: 2.4, ENGINEER: 2.25 };
 
 const contactSpawns: Vec2[] = [
   { x: 48.5, y: 4.5 }, { x: 46.5, y: 6.5 }, { x: 49.2, y: 8.4 },
@@ -31,41 +30,70 @@ const contactSpawns: Vec2[] = [
 
 export class Simulation {
   public state: SimulationState;
+  private readonly setup: TacticalSetup;
   private nextContactId = 1;
   private spawnTimer = 1.5;
   private random = mulberry32(423771);
   private cacheAnnounced = false;
 
-  constructor() {
+  constructor(setup: TacticalSetup = defaultSetup) {
+    this.setup = structuredClone(setup);
     this.state = this.createState();
   }
 
   private createState(): SimulationState {
     const map = createFacilityMap();
-    const units = unitTemplates.map((template, index): Unit => {
-      const pos = { ...starts[index] };
-      const target = { ...initialTargets[index] };
-      return { ...template, pos, prev: { ...pos }, target, path: findPath(map, pos, target) };
+    const columns = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(this.setup.units.length))));
+    const units = this.setup.units.map((template, index): Unit => {
+      const pos = { x: 5.4 + (index % columns) * 0.9, y: 27.2 + Math.floor(index / columns) * 0.85 };
+      const target = { ...pos };
+      const maxAmmo = weaponMagazine[template.weapon];
+      return {
+        ...template,
+        id: index + 1,
+        facing: -Math.PI / 2,
+        speed: roleSpeed[template.role],
+        ammo: maxAmmo,
+        maxAmmo,
+        reserveAmmo: weaponReserve[template.weapon],
+        reloadTimer: 0,
+        stress: 10 + index * 2,
+        phase: index * 1.17,
+        selected: index === 0,
+        state: "holding",
+        shotFlash: 0,
+        shotCooldown: index * 0.12,
+        pos,
+        prev: { ...pos },
+        target,
+        path: [],
+      };
     });
     const events: EventEntry[] = [
       { time: 0, who: "SYSTEM", message: "Sensor link established. Facility map resolving.", tone: "normal" },
-      { time: 0.7, who: "MAYA", message: "Medical cache located in pharmacy.", tone: "good" },
-      { time: 1.2, who: "REYES", message: "Movement east. Taking the corridor.", tone: "warning" },
+      { time: 0.7, who: "SENSOR", message: "Objective position resolved. Approach routes are open.", tone: "good" },
+      { time: 1.2, who: "CONTACT", message: "Movement registering beyond the holding floor.", tone: "warning" },
     ];
     const state: SimulationState = {
       paused: false,
       elapsed: 0,
-      threat: 0.52,
+      threat: this.setup.threat,
       cacheProgress: 0,
       cacheSecured: false,
       scanAngle: 0,
       signalPulse: 0,
+      missionTitle: this.setup.missionTitle,
+      objectiveLabel: this.setup.objectiveLabel,
+      riskLabel: this.setup.riskLabel,
+      missionStatus: "active",
+      contactsNeutralised: 0,
       units,
       contacts: [],
       map,
       events,
     };
-    for (let i = 0; i < 15; i += 1) state.contacts.push(this.makeContact(i));
+    const initialContacts = 9 + Math.round(this.setup.threat * 10);
+    for (let i = 0; i < initialContacts; i += 1) state.contacts.push(this.makeContact(i));
     return state;
   }
 
@@ -93,6 +121,7 @@ export class Simulation {
   }
 
   public togglePause(): void {
+    if (this.state.missionStatus !== "active") return;
     this.state.paused = !this.state.paused;
   }
 
@@ -117,6 +146,7 @@ export class Simulation {
   }
 
   public issueMove(requestedTarget: Vec2): void {
+    if (this.state.missionStatus !== "active") return;
     const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down");
     if (!selected.length) return;
     const columns = Math.ceil(Math.sqrt(selected.length));
@@ -129,11 +159,13 @@ export class Simulation {
       unit.target = target;
       unit.path = findPath(this.state.map, unit.pos, target);
       unit.state = "moving";
+      unit.reloadTimer = 0;
     });
     this.pushEvent("COMMAND", `${selected.length > 1 ? "Squad" : selected[0].name} retasked to waypoint.`, "normal");
   }
 
   public issueHold(): void {
+    if (this.state.missionStatus !== "active") return;
     const selected = this.state.units.filter((unit) => unit.selected);
     for (const unit of selected) {
       unit.path = [];
@@ -141,6 +173,15 @@ export class Simulation {
       unit.state = "holding";
     }
     if (selected.length) this.pushEvent("COMMAND", `${selected.length > 1 ? "Squad" : selected[0].name} holding position.`, "normal");
+  }
+
+  public issueReload(): void {
+    if (this.state.missionStatus !== "active") return;
+    const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down" && unit.ammo < unit.maxAmmo && unit.reserveAmmo > 0);
+    for (const unit of selected) this.startReload(unit);
+    if (selected.length) {
+      this.pushEvent("SQUAD", `${selected.length > 1 ? "Selected survivors are" : `${selected[0].name} is`} reloading in place.`, "warning");
+    }
   }
 
   private pushEvent(who: string, message: string, tone: EventEntry["tone"]): void {
@@ -152,7 +193,7 @@ export class Simulation {
     const state = this.state;
     state.scanAngle = (state.scanAngle + dt * 0.22) % (Math.PI * 2);
     state.signalPulse += dt;
-    if (state.paused) return;
+    if (state.paused || state.missionStatus !== "active") return;
     state.elapsed += dt;
 
     this.updateUnits(dt);
@@ -161,14 +202,20 @@ export class Simulation {
 
     this.spawnTimer -= dt;
     const living = state.contacts.filter((contact) => contact.alive).length;
-    if (this.spawnTimer <= 0 && living < 25) {
+    const contactLimit = 16 + Math.round(this.setup.threat * 18);
+    if (this.spawnTimer <= 0 && living < contactLimit) {
       const newcomer = this.makeContact(Math.floor(this.random() * contactSpawns.length));
       state.contacts.push(newcomer);
-      this.spawnTimer = 2.4 + this.random() * 3.2;
+      this.spawnTimer = 2.1 + this.random() * (4.8 - this.setup.threat * 2.4);
       if (this.random() > 0.58) this.pushEvent("SENSOR", "New contact entering the east sector.", "warning");
     }
     state.contacts = state.contacts.filter((contact) => contact.alive || contact.hitFlash > 0);
-    state.threat = clamp(0.26 + living / 34 + state.elapsed / 420, 0, 1);
+    state.threat = clamp(this.setup.threat * 0.55 + living / 40 + state.elapsed / 520, 0, 1);
+    if (state.units.every((unit) => unit.state === "down")) {
+      state.missionStatus = "failure";
+      state.paused = true;
+      this.pushEvent("SYSTEM", "All squad telemetry is down. Operation failed.", "warning");
+    }
   }
 
   public updateBenchmark(dt: number): void {
@@ -183,6 +230,34 @@ export class Simulation {
     }
   }
 
+  public canExtract(): boolean {
+    if (!this.state.cacheSecured || this.state.missionStatus !== "active") return false;
+    const active = this.state.units.filter((unit) => unit.state !== "down");
+    return active.length > 0 && active.every((unit) => distance(unit.pos, this.state.map.extraction) <= 3.2);
+  }
+
+  public extract(): TacticalOutcome {
+    if (!this.canExtract()) throw new Error("Move every standing survivor into the extraction zone first.");
+    this.state.missionStatus = "success";
+    this.state.paused = true;
+    this.pushEvent("SYSTEM", "Extraction confirmed. Ghostlink handoff complete.", "good");
+    return this.outcome();
+  }
+
+  public outcome(): TacticalOutcome {
+    const down = this.state.units.filter((unit) => unit.state === "down");
+    const standing = this.state.units.filter((unit) => unit.state !== "down");
+    return {
+      success: this.state.missionStatus === "success",
+      objectiveCompleted: this.state.cacheSecured,
+      extractedPersonIds: this.state.missionStatus === "success" ? standing.map((unit) => unit.personId) : [],
+      downPersonIds: down.map((unit) => unit.personId),
+      healthByPersonId: Object.fromEntries(this.state.units.map((unit) => [unit.personId, Math.round(unit.health)])),
+      ammunitionRemaining: this.state.units.reduce((sum, unit) => sum + unit.ammo + unit.reserveAmmo, 0),
+      contactsNeutralised: this.state.contactsNeutralised,
+    };
+  }
+
   private updateUnits(dt: number): void {
     const { units, contacts } = this.state;
     for (const unit of units) {
@@ -190,6 +265,17 @@ export class Simulation {
       unit.shotFlash = Math.max(0, unit.shotFlash - dt * 8);
       unit.shotCooldown -= dt;
       if (unit.state === "down") continue;
+
+      if (unit.state === "reloading") {
+        unit.reloadTimer -= dt;
+        if (unit.reloadTimer <= 0) {
+          const loaded = Math.min(unit.maxAmmo - unit.ammo, unit.reserveAmmo);
+          unit.ammo += loaded;
+          unit.reserveAmmo -= loaded;
+          unit.state = "holding";
+        }
+        continue;
+      }
 
       if (unit.path.length) {
         const waypoint = unit.path[0];
@@ -203,7 +289,7 @@ export class Simulation {
         unit.facing = angleTo(unit.pos, this.state.map.cache);
       } else if (unit.state === "moving") unit.state = "holding";
 
-      if (unit.state !== "collecting" && unit.shotCooldown <= 0 && unit.ammo > 0) {
+      if (unit.state === "holding" && unit.shotCooldown <= 0 && unit.ammo > 0) {
         const range = unit.weapon === "rifle" ? 9 : unit.weapon === "shotgun" ? 5.8 : 7.2;
         let closest: Contact | undefined;
         let closestDistance = range;
@@ -222,9 +308,14 @@ export class Simulation {
           unit.shotCooldown = unit.weapon === "shotgun" ? 1.25 : unit.weapon === "rifle" ? 0.72 : 0.42;
           closest.health -= unit.weapon === "shotgun" && closestDistance < 3.8 ? 2 : 1;
           closest.hitFlash = 1;
-          if (closest.health <= 0) closest.alive = false;
+          if (closest.health <= 0) {
+            closest.alive = false;
+            this.state.contactsNeutralised += 1;
+          }
         }
       }
+
+      if (unit.state === "holding" && unit.ammo === 0 && unit.reserveAmmo > 0) this.startReload(unit);
 
       const nearestContact = contacts.reduce<Contact | null>((nearest, contact) => {
         if (!contact.alive) return nearest;
@@ -280,10 +371,17 @@ export class Simulation {
     if (this.state.cacheProgress >= 1) {
       this.state.cacheSecured = true;
       for (const unit of this.state.units) if (unit.state === "collecting") unit.state = "holding";
-      this.pushEvent("MAYA", "Medical cache secured. Ready to extract.", "good");
+      this.pushEvent("SQUAD", "Objective secured. Return to extraction.", "good");
     } else if (this.state.cacheProgress > 0.45 && !this.cacheAnnounced) {
       this.cacheAnnounced = true;
       this.pushEvent("HOLT", "Cache transfer at fifty percent.", "good");
     }
+  }
+
+  private startReload(unit: Unit): void {
+    unit.path = [];
+    unit.target = { ...unit.pos };
+    unit.state = "reloading";
+    unit.reloadTimer = weaponReloadTime[unit.weapon];
   }
 }

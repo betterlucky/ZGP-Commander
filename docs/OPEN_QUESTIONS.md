@@ -4,8 +4,9 @@ Status: **non-blocking; resolve through prototypes and playtesting**
 
 Last updated: 2026-07-13
 
-These questions must not delay the first production tactical and campaign slices.
-They are recorded to prevent provisional guesses becoming permanent rules.
+These questions should be answered through later slices and playtesting rather
+than delaying the current playable loop. They are recorded to prevent
+provisional guesses becoming permanent rules.
 
 ## Balance
 

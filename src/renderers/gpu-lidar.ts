@@ -31,6 +31,10 @@ export interface GpuLidarStats {
   contacts: number;
 }
 
+export interface GpuLidarOptions {
+  benchmarkContacts?: boolean;
+}
+
 const vertexShaderSource = `#version 300 es
 precision highp float;
 layout(location = 0) in vec3 a_position;
@@ -122,7 +126,7 @@ const propHeight: Record<Prop["kind"], number> = {
 
 export class GpuLidarRenderer {
   public readonly available: boolean;
-  public readonly stats: GpuLidarStats = { fps: 0, staticPoints: 0, dynamicPoints: 0, drawCalls: 0, contacts: CONTACT_COUNT };
+  public readonly stats: GpuLidarStats = { fps: 0, staticPoints: 0, dynamicPoints: 0, drawCalls: 0, contacts: 0 };
   public transform: IsoTransform | null = null;
   private readonly gl: WebGL2RenderingContext | null;
   private readonly program: WebGLProgram | null;
@@ -132,15 +136,18 @@ export class GpuLidarRenderer {
   private readonly virtualMap: FacilityMap;
   private readonly staticData: Float32Array;
   private readonly contacts: BenchmarkContact[];
+  private readonly benchmarkMode: boolean;
   private readonly unitModels = new Map<number, LocalPoint[]>();
+  private readonly liveContactModels = new Map<number, LocalPoint[]>();
   private dynamicData = new Float32Array(CONTACT_COUNT * 180 * STRIDE_FLOATS);
   private dynamicPointCount = 0;
   private lastFrameTime = 0;
   private smoothedFps = 60;
   private readonly displayOffset: Vec2;
 
-  constructor(canvas: HTMLCanvasElement, map: FacilityMap) {
+  constructor(canvas: HTMLCanvasElement, map: FacilityMap, options: GpuLidarOptions = {}) {
     this.map = map;
+    this.benchmarkMode = options.benchmarkContacts ?? false;
     this.virtualMap = { ...map, width: map.width * QUADRANTS, height: map.height * QUADRANTS };
     this.displayOffset = { x: map.width, y: 0 };
     const gl = canvas.getContext("webgl2", {
@@ -167,7 +174,7 @@ export class GpuLidarRenderer {
     this.dynamicBuffer = gl.createBuffer();
     if (!this.staticBuffer || !this.dynamicBuffer) throw new Error("Unable to allocate point buffers");
     this.staticData = this.buildStaticPointCloud();
-    this.contacts = this.buildContacts();
+    this.contacts = this.benchmarkMode ? this.buildContacts() : [];
     this.stats.staticPoints = this.staticData.length / STRIDE_FLOATS;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.staticBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.staticData, gl.STATIC_DRAW);
@@ -338,6 +345,14 @@ export class GpuLidarRenderer {
     return points;
   }
 
+  private getLiveContactModel(contactId: number): LocalPoint[] {
+    const existing = this.liveContactModels.get(contactId);
+    if (existing) return existing;
+    const points = this.buildHumanoidPoints(12000 + contactId * 71, 0.38, 1.02, 0.86, false);
+    this.liveContactModels.set(contactId, points);
+    return points;
+  }
+
   private buildHumanoidPoints(seed: number, width: number, heightScale: number, weaponLength: number, equipped: boolean): LocalPoint[] {
     const random = mulberry32(seed);
     const points: LocalPoint[] = [];
@@ -389,7 +404,10 @@ export class GpuLidarRenderer {
   }
 
   private buildDynamicPointCloud(state: SimulationState, time: number): void {
-    const requiredPoints = this.contacts.reduce((total, contact) => total + contact.points.length, 0) + state.units.reduce((total, unit) => total + this.getUnitModel(unit).length, 0);
+    const contactPoints = this.benchmarkMode
+      ? this.contacts.reduce((total, contact) => total + contact.points.length, 0)
+      : state.contacts.reduce((total, contact) => total + this.getLiveContactModel(contact.id).length, 0);
+    const requiredPoints = contactPoints + state.units.reduce((total, unit) => total + this.getUnitModel(unit).length, 0);
     if (this.dynamicData.length < requiredPoints * STRIDE_FLOATS) {
       this.dynamicData = new Float32Array(Math.ceil(requiredPoints * STRIDE_FLOATS * 1.2));
       if (this.gl && this.dynamicBuffer) {
@@ -404,20 +422,39 @@ export class GpuLidarRenderer {
       this.dynamicData[cursor++] = alpha; this.dynamicData[cursor++] = size;
     };
 
-    for (let index = 0; index < this.contacts.length; index += 1) {
-      const contact = this.contacts[index];
-      const travel = Math.sin(time * contact.speed + contact.phase) * 1.35;
-      const sway = Math.cos(time * contact.speed * 0.73 + contact.phase) * 0.42;
-      const cos = Math.cos(contact.angle);
-      const sin = Math.sin(contact.angle);
-      const originX = contact.origin.x + cos * travel - sin * sway;
-      const originY = contact.origin.y + sin * travel + cos * sway;
-      const flicker = 0.7 + Math.sin(time * 7 + index) * 0.18;
-      for (const point of contact.points) {
-        const x = originX + point.x * cos - point.y * sin;
-        const y = originY + point.x * sin + point.y * cos;
-        write(x, y, point.z + Math.sin(time * 3 + contact.phase) * 0.025, 1, 0.045, 0.018, Math.min(1, point.alpha * contact.confidence * (1.08 + flicker * 0.25)), point.size * 3.5);
+    if (this.benchmarkMode) {
+      for (let index = 0; index < this.contacts.length; index += 1) {
+        const contact = this.contacts[index];
+        const travel = Math.sin(time * contact.speed + contact.phase) * 1.35;
+        const sway = Math.cos(time * contact.speed * 0.73 + contact.phase) * 0.42;
+        const cos = Math.cos(contact.angle);
+        const sin = Math.sin(contact.angle);
+        const originX = contact.origin.x + cos * travel - sin * sway;
+        const originY = contact.origin.y + sin * travel + cos * sway;
+        const flicker = 0.7 + Math.sin(time * 7 + index) * 0.18;
+        for (const point of contact.points) {
+          const x = originX + point.x * cos - point.y * sin;
+          const y = originY + point.x * sin + point.y * cos;
+          write(x, y, point.z + Math.sin(time * 3 + contact.phase) * 0.025, 1, 0.045, 0.018, Math.min(1, point.alpha * contact.confidence * (1.08 + flicker * 0.25)), point.size * 3.5);
+        }
       }
+      this.stats.contacts = this.contacts.length;
+    } else {
+      const activeContacts = state.contacts.filter((contact) => contact.alive || contact.hitFlash > 0);
+      for (const contact of activeContacts) {
+        const points = this.getLiveContactModel(contact.id);
+        const cos = Math.cos(contact.facing);
+        const sin = Math.sin(contact.facing);
+        const originX = contact.pos.x + this.displayOffset.x;
+        const originY = contact.pos.y + this.displayOffset.y;
+        const fade = contact.alive ? 1 : Math.min(1, contact.hitFlash);
+        for (const point of points) {
+          const x = originX + point.x * cos - point.y * sin;
+          const y = originY + point.x * sin + point.y * cos;
+          write(x, y, point.z + Math.sin(time * 3 + contact.phase) * 0.025, 1, 0.045, 0.018, point.alpha * contact.confidence * fade, point.size * 3.35);
+        }
+      }
+      this.stats.contacts = activeContacts.filter((contact) => contact.alive).length;
     }
 
     for (const unit of state.units) {

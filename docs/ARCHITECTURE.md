@@ -1,7 +1,6 @@
 # Architecture
 
-Status: **forward architecture; only the Ghostlink performance slice currently
-exists**
+Status: **forward architecture with a playable campaign vertical slice**
 
 Last updated: 2026-07-13
 
@@ -138,8 +137,10 @@ cross-device floating-point lockstep until a feature actually needs it.
 
 ## Intended source layout
 
-The current `src/` directory is a compact prototype. Production work should grow
-towards responsibility-based modules rather than enlarging the existing files:
+The current `src/` directory is a compact vertical slice. Campaign state and
+application flow have begun moving into responsibility-based modules; tactical
+simulation and rendering remain compact while their production interfaces are
+still being proven:
 
 ```text
 src/
@@ -154,8 +155,8 @@ src/
   testing/         deterministic fixtures and scenario builders
 ```
 
-This is a direction, not a request to move prototype files mechanically before
-production systems exist.
+This remains a direction, not a request to move files mechanically before their
+production boundaries are understood.
 
 ## Data and content
 
@@ -173,9 +174,11 @@ Current minimum:
 npm run check
 ```
 
+The campaign rule suite currently covers action consumption, rewards in transit,
+base output, rescue identity, support expansion cost and mission-board rotation.
 As production systems arrive, add:
 
-- unit tests for pure campaign and tactical rules;
+- broader unit tests for tactical rules and campaign edge cases;
 - seeded scenario tests for combat, extraction and injury outcomes;
 - save/load round trips and schema migrations;
 - performance fixtures for representative maps, contacts and roster UI;
