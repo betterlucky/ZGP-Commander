@@ -83,6 +83,7 @@ export class LidarRenderer {
     ctx.fillStyle = "#9fc7d2";
     for (let index = 0; index < state.map.walls.length; index += 1) {
       const wall = state.map.walls[index];
+      if (wall.door) continue;
       const samples = 5;
       for (let i = 0; i <= samples; i += 1) {
         const t = i / samples;
@@ -103,7 +104,7 @@ export class LidarRenderer {
   private drawProps(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
     for (let index = 0; index < state.map.props.length; index += 1) {
       const prop = state.map.props[index];
-      const height = prop.kind === "shelf" ? 1.35 : prop.kind === "terminal" ? 1.05 : prop.kind === "bed" ? 0.5 : 0.7;
+      const height = prop.kind === "shelf" ? 1.35 : prop.kind === "terminal" ? 1.05 : prop.kind === "pallet" ? 0.38 : prop.kind === "bed" ? 0.5 : 0.7;
       this.drawPointBox(ctx, transform, prop, height, index);
     }
   }
@@ -112,7 +113,7 @@ export class LidarRenderer {
     const random = mulberry32(6100 + seed * 97);
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = prop.kind === "terminal" ? "#8bd8df" : "#7599a3";
+    ctx.fillStyle = prop.blocksVision ? "#77c9d4" : prop.blocksMovement ? "#b89d51" : prop.kind === "terminal" ? "#8bd8df" : "#7599a3";
     ctx.shadowColor = "rgba(90,180,200,.35)";
     ctx.shadowBlur = 1.5;
     const rotation = prop.rotation ?? 0;
@@ -155,18 +156,25 @@ export class LidarRenderer {
   }
 
   private drawObjectives(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
-    const cache = transform.toScreen(state.map.cache, 0.4);
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.shadowColor = "#ffb42e"; ctx.shadowBlur = 12;
     ctx.strokeStyle = "#ffc14d"; ctx.lineWidth = 1.4;
     const size = transform.tileW * 0.38;
-    ctx.strokeRect(cache.x - size / 2, cache.y - size * 0.42, size, size * 0.76);
-    ctx.beginPath(); ctx.moveTo(cache.x, cache.y - size * 0.3); ctx.lineTo(cache.x, cache.y + size * 0.22); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cache.x - size * 0.25, cache.y - size * 0.04); ctx.lineTo(cache.x + size * 0.25, cache.y - size * 0.04); ctx.stroke();
-    ctx.strokeStyle = `rgba(255,185,54,${0.5 + Math.sin(state.elapsed * 3) * 0.25})`;
-    ctx.beginPath(); ctx.arc(cache.x, cache.y, size * 0.72, 0, Math.PI * 2); ctx.stroke();
+    for (const [index, site] of state.caches.entries()) {
+      const cache = transform.toScreen(site.pos, 0.4);
+      ctx.strokeStyle = site.secured ? "rgba(100,170,155,.45)" : "#ffc14d";
+      ctx.strokeRect(cache.x - size / 2, cache.y - size * 0.42, size, size * 0.76);
+      ctx.beginPath(); ctx.arc(cache.x, cache.y, size * 0.72, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = site.secured ? "#64aa99" : "#ffc14d"; ctx.font = "700 8px monospace"; ctx.textAlign = "center";
+      ctx.fillText(`${index + 1}`, cache.x, cache.y - size);
+    }
     ctx.restore();
+
+    const breach = transform.toScreen(state.map.breach.pos, 0.05);
+    ctx.save(); ctx.strokeStyle = state.breachOpen ? "#4af0d5" : "#ff765f"; ctx.fillStyle = ctx.strokeStyle;
+    ctx.shadowColor = ctx.strokeStyle; ctx.shadowBlur = 10; ctx.strokeRect(breach.x - 10, breach.y - 5, 20, 10);
+    ctx.font = "700 8px monospace"; ctx.textAlign = "center"; ctx.fillText(state.breachOpen ? "OPEN" : "F BREACH", breach.x, breach.y - 9); ctx.restore();
 
     const extract = transform.toScreen(state.map.extraction, 0.02);
     ctx.save(); ctx.strokeStyle = "rgba(75,240,210,.9)"; ctx.fillStyle = "rgba(55,210,185,.12)";
@@ -178,7 +186,7 @@ export class LidarRenderer {
   }
 
   private drawUnits(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
-    const sorted = [...state.units].sort((a, b) => a.pos.x + a.pos.y - (b.pos.x + b.pos.y));
+    const sorted = [...state.units].sort((a, b) => Number(a.selected) - Number(b.selected) || a.pos.x + a.pos.y - (b.pos.x + b.pos.y));
     for (const unit of sorted) this.drawUnit(ctx, unit, state, transform);
   }
 

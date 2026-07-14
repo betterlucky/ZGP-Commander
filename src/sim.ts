@@ -1,5 +1,5 @@
 import { angleTo, clamp, distance, moveTowards, mulberry32 } from "./math";
-import { createFacilityMap, findPath, nearestWalkable } from "./map";
+import { createFacilityMap, findPath, hasLineOfSight, nearestWalkable } from "./map";
 import type { Contact, EventEntry, SimulationState, TacticalOutcome, TacticalSetup, TacticalUnitSetup, Unit, Vec2 } from "./types";
 
 const defaultUnitSetup: TacticalUnitSetup[] = [
@@ -20,13 +20,8 @@ const defaultSetup: TacticalSetup = {
 const weaponMagazine: Record<Unit["weapon"], number> = { rifle: 24, shotgun: 8, smg: 30, carbine: 24 };
 const weaponReserve: Record<Unit["weapon"], number> = { rifle: 48, shotgun: 24, smg: 60, carbine: 48 };
 const weaponReloadTime: Record<Unit["weapon"], number> = { rifle: 2.4, shotgun: 3.2, smg: 2.1, carbine: 2.3 };
-const roleSpeed: Record<Unit["role"], number> = { MEDIC: 2.35, SCAVENGER: 2.2, RANGER: 2.4, ENGINEER: 2.25 };
-
-const contactSpawns: Vec2[] = [
-  { x: 56.5, y: 4.5 }, { x: 53.5, y: 7.5 }, { x: 56.2, y: 12.4 },
-  { x: 55.2, y: 19.5 }, { x: 51.4, y: 28.8 }, { x: 47.3, y: 34.4 },
-  { x: 34.4, y: 4.2 }, { x: 20.1, y: 4.4 },
-];
+const roleSpeed: Record<Unit["role"], number> = { MEDIC: 3.15, SCAVENGER: 3.0, RANGER: 3.25, ENGINEER: 3.05 };
+const safeSpawnDistance = 16;
 
 export class Simulation {
   public state: SimulationState;
@@ -34,7 +29,7 @@ export class Simulation {
   private nextContactId = 1;
   private spawnTimer = 1.5;
   private random = mulberry32(423771);
-  private cacheAnnounced = false;
+  private cacheAnnounced = new Set<string>();
 
   constructor(setup: TacticalSetup = defaultSetup) {
     this.setup = structuredClone(setup);
@@ -46,8 +41,8 @@ export class Simulation {
     const columns = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(this.setup.units.length))));
     const units = this.setup.units.map((template, index): Unit => {
       const pos = {
-        x: map.extraction.x + (index % columns) * 0.95,
-        y: map.extraction.y - Math.floor(index / columns) * 0.95,
+        x: map.insertion.x + (index % columns) * 0.95,
+        y: map.insertion.y + Math.floor(index / columns) * 0.82,
       };
       const target = { ...pos };
       const maxAmmo = weaponMagazine[template.weapon];
@@ -83,8 +78,8 @@ export class Simulation {
       paused: false,
       elapsed: 0,
       threat: this.setup.threat,
-      cacheProgress: 0,
-      cacheSecured: false,
+      caches: map.caches.slice(0, this.setup.cacheCount ?? map.caches.length).map((cache) => ({ ...cache, pos: { ...cache.pos }, progress: 0, secured: false })),
+      breachOpen: false,
       scanAngle: 0,
       signalPulse: 0,
       missionTitle: this.setup.missionTitle,
@@ -92,20 +87,36 @@ export class Simulation {
       riskLabel: this.setup.riskLabel,
       missionStatus: "active",
       contactsNeutralised: 0,
+      shotSequence: 0,
+      killSequence: 0,
+      hitSequence: 0,
+      breachSequence: 0,
+      cacheSequence: 0,
       units,
       contacts: [],
       map,
       events,
     };
     const initialContacts = 9 + Math.round(this.setup.threat * 10);
-    for (let i = 0; i < initialContacts; i += 1) state.contacts.push(this.makeContact(i));
+    for (let i = 0; i < initialContacts; i += 1) {
+      const contact = this.makeContact(i, map, units);
+      if (contact) state.contacts.push(contact);
+    }
     return state;
   }
 
-  private makeContact(index = 0): Contact {
-    const spawn = contactSpawns[index % contactSpawns.length];
+  private makeContact(index = 0, map = this.state.map, units = this.state.units, requireSafe = false): Contact | null {
+    const standingUnits = units.filter((unit) => unit.state !== "down");
+    if (requireSafe && !standingUnits.length) return null;
+    const rankedSpawns = map.contactSpawns
+      .map((spawn) => ({ spawn, clearance: standingUnits.length ? Math.min(...standingUnits.map((unit) => distance(spawn, unit.pos))) : Infinity }))
+      .sort((a, b) => b.clearance - a.clearance);
+    const safeSpawns = rankedSpawns.filter((candidate) => candidate.clearance >= safeSpawnDistance);
+    if (requireSafe && !safeSpawns.length) return null;
+    const spawnPool = safeSpawns.length ? safeSpawns : rankedSpawns.slice(0, 2);
+    const spawn = spawnPool[index % spawnPool.length].spawn;
     const jitter = () => (this.random() - 0.5) * 1.4;
-    const pos = nearestWalkable(this.state?.map ?? createFacilityMap(), { x: spawn.x + jitter(), y: spawn.y + jitter() });
+    const pos = nearestWalkable(map, { x: spawn.x + jitter(), y: spawn.y + jitter() });
     return {
       id: this.nextContactId++,
       pos,
@@ -133,7 +144,7 @@ export class Simulation {
   public reset(): void {
     this.nextContactId = 1;
     this.spawnTimer = 1.5;
-    this.cacheAnnounced = false;
+    this.cacheAnnounced.clear();
     this.random = mulberry32(423771);
     this.state = this.createState();
   }
@@ -192,16 +203,17 @@ export class Simulation {
     this.pushEvent("COMMAND", `${selected.length > 1 ? "Squad" : selected[0].name} retasked to waypoint.`, "normal");
   }
 
-  public issueScavenge(): Unit | null {
-    if (this.state.missionStatus !== "active" || this.state.cacheSecured) return null;
+  public issueScavenge(cacheId: string): Unit | null {
+    const cache = this.state.caches.find((candidate) => candidate.id === cacheId);
+    if (this.state.missionStatus !== "active" || !this.state.breachOpen || !cache || cache.secured) return null;
     const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down");
     if (!selected.length) return null;
     const operator = [...selected].sort((a, b) => b.scavengeSkill - a.scavengeSkill || a.id - b.id)[0];
-    const cacheTarget = nearestWalkable(this.state.map, this.state.map.cache);
+    const cacheTarget = nearestWalkable(this.state.map, cache.pos);
     operator.target = cacheTarget;
     operator.path = findPath(this.state.map, operator.pos, cacheTarget);
     operator.state = operator.path.length ? "moving" : "collecting";
-    operator.interaction = "cache";
+    operator.interaction = cache.id;
     operator.moveSpeed = operator.speed;
     operator.reloadTimer = 0;
 
@@ -209,8 +221,8 @@ export class Simulation {
     defenders.forEach((unit, index) => {
       const angle = -Math.PI * 0.7 + (index / Math.max(1, defenders.length - 1)) * Math.PI * 1.4;
       const defendTarget = nearestWalkable(this.state.map, {
-        x: this.state.map.cache.x + Math.cos(angle) * 2.7,
-        y: this.state.map.cache.y + Math.sin(angle) * 2.7,
+        x: cache.pos.x + Math.cos(angle) * 2.7,
+        y: cache.pos.y + Math.sin(angle) * 2.7,
       });
       unit.target = defendTarget;
       unit.path = findPath(this.state.map, unit.pos, defendTarget);
@@ -221,6 +233,19 @@ export class Simulation {
     });
     this.pushEvent("COMMAND", `${operator.name} assigned to scavenge; ${defenders.length || "no"} defender${defenders.length === 1 ? "" : "s"} covering.`, "good");
     return operator;
+  }
+
+  public issueBreach(): boolean {
+    if (this.state.missionStatus !== "active" || this.state.breachOpen) return false;
+    const operator = this.state.units.find((unit) => unit.selected && unit.state !== "down" && distance(unit.pos, this.state.map.breach.pos) <= 5.2);
+    if (!operator) return false;
+    this.state.breachOpen = true;
+    this.state.map.breach.open = true;
+    const doorWall = this.state.map.walls.find((wall) => wall.door);
+    if (doorWall) doorWall.locked = false;
+    this.state.breachSequence += 1;
+    this.pushEvent(operator.name, "Entry breach open. Interior approach authorised.", "good");
+    return true;
   }
 
   public issueHold(): void {
@@ -259,16 +284,18 @@ export class Simulation {
 
     this.updateUnits(dt);
     this.updateContacts(dt);
-    this.updateCache(dt);
+    this.updateCaches(dt);
 
-    this.spawnTimer -= dt;
+    if (state.breachOpen) this.spawnTimer -= dt;
     const living = state.contacts.filter((contact) => contact.alive).length;
     const contactLimit = 16 + Math.round(this.setup.threat * 18);
-    if (this.spawnTimer <= 0 && living < contactLimit) {
-      const newcomer = this.makeContact(Math.floor(this.random() * contactSpawns.length));
-      state.contacts.push(newcomer);
-      this.spawnTimer = 2.1 + this.random() * (4.8 - this.setup.threat * 2.4);
-      if (this.random() > 0.58) this.pushEvent("SENSOR", "New contact entering the east sector.", "warning");
+    if (state.breachOpen && this.spawnTimer <= 0 && living < contactLimit) {
+      const newcomer = this.makeContact(Math.floor(this.random() * state.map.contactSpawns.length), state.map, state.units, true);
+      if (newcomer) {
+        state.contacts.push(newcomer);
+        this.spawnTimer = 2.1 + this.random() * (4.8 - this.setup.threat * 2.4);
+        if (this.random() > 0.58) this.pushEvent("SENSOR", "New contact crossing an external wall entry.", "warning");
+      } else this.spawnTimer = 1;
     }
     state.contacts = state.contacts.filter((contact) => contact.alive || contact.hitFlash > 0);
     state.threat = clamp(this.setup.threat * 0.55 + living / 40 + state.elapsed / 520, 0, 1);
@@ -292,7 +319,7 @@ export class Simulation {
   }
 
   public canExtract(): boolean {
-    if (!this.state.cacheSecured || this.state.missionStatus !== "active") return false;
+    if (!this.state.caches.some((cache) => cache.secured) || this.state.missionStatus !== "active") return false;
     const active = this.state.units.filter((unit) => unit.state !== "down");
     return active.length > 0 && active.every((unit) => distance(unit.pos, this.state.map.extraction) <= 3.2);
   }
@@ -310,12 +337,14 @@ export class Simulation {
     const standing = this.state.units.filter((unit) => unit.state !== "down");
     return {
       success: this.state.missionStatus === "success",
-      objectiveCompleted: this.state.cacheSecured,
+      objectiveCompleted: this.state.caches.every((cache) => cache.secured),
       extractedPersonIds: this.state.missionStatus === "success" ? standing.map((unit) => unit.personId) : [],
       downPersonIds: down.map((unit) => unit.personId),
       healthByPersonId: Object.fromEntries(this.state.units.map((unit) => [unit.personId, Math.round(unit.health)])),
       ammunitionRemaining: this.state.units.reduce((sum, unit) => sum + unit.ammo + unit.reserveAmmo, 0),
       contactsNeutralised: this.state.contactsNeutralised,
+      cachesRecovered: this.state.caches.filter((cache) => cache.secured).length,
+      cacheCount: this.state.caches.length,
     };
   }
 
@@ -345,9 +374,12 @@ export class Simulation {
         unit.phase += dt * unit.moveSpeed * 4.8;
         unit.state = "moving";
         if (distance(unit.pos, waypoint) < 0.06) unit.path.shift();
-      } else if (unit.interaction === "cache" && distance(unit.pos, this.state.map.cache) < 2.1 && !this.state.cacheSecured) {
-        unit.state = "collecting";
-        unit.facing = angleTo(unit.pos, this.state.map.cache);
+      } else if (unit.interaction) {
+        const cache = this.state.caches.find((candidate) => candidate.id === unit.interaction);
+        if (cache && !cache.secured && distance(unit.pos, cache.pos) < 2.1) {
+          unit.state = "collecting";
+          unit.facing = angleTo(unit.pos, cache.pos);
+        } else if (unit.state === "moving") unit.state = "holding";
       } else if (unit.state === "moving") unit.state = "holding";
 
       if (unit.state === "holding" && unit.shotCooldown <= 0 && unit.ammo > 0) {
@@ -355,7 +387,7 @@ export class Simulation {
         let closest: Contact | undefined;
         let closestDistance = range;
         for (const contact of contacts) {
-          if (!contact.alive) continue;
+          if (!contact.alive || !hasLineOfSight(this.state.map, unit.pos, contact.pos)) continue;
           const candidateDistance = distance(unit.pos, contact.pos);
           if (candidateDistance < closestDistance) {
             closest = contact;
@@ -365,6 +397,7 @@ export class Simulation {
         if (closest) {
           unit.facing = angleTo(unit.pos, closest.pos);
           unit.shotFlash = 1;
+          this.state.shotSequence += 1;
           unit.ammo -= 1;
           unit.shotCooldown = unit.weapon === "shotgun" ? 1.25 : unit.weapon === "rifle" ? 0.72 : 0.42;
           closest.health -= unit.weapon === "shotgun" && closestDistance < 3.8 ? 2 : 1;
@@ -372,6 +405,7 @@ export class Simulation {
           if (closest.health <= 0) {
             closest.alive = false;
             this.state.contactsNeutralised += 1;
+            this.state.killSequence += 1;
           }
         }
       }
@@ -390,15 +424,18 @@ export class Simulation {
 
   private updateContacts(dt: number): void {
     const { contacts, units, map } = this.state;
+    if (!this.state.breachOpen) return;
+    const standingUnits = units.filter((unit) => unit.state !== "down");
+    if (!standingUnits.length) return;
     for (const contact of contacts) {
       contact.hitFlash = Math.max(0, contact.hitFlash - dt * 3.5);
       if (!contact.alive) continue;
       contact.prev = { ...contact.pos };
       contact.repath -= dt;
       contact.attackCooldown -= dt;
-      const target = units.reduce((closest, unit) =>
+      const target = standingUnits.reduce((closest, unit) =>
         distance(contact.pos, unit.pos) < distance(contact.pos, closest.pos) ? unit : closest,
-      units[0]);
+      standingUnits[0]);
       contact.target = target.id;
       if (contact.repath <= 0 || !contact.path.length) {
         contact.path = findPath(map, contact.pos, target.pos);
@@ -415,6 +452,7 @@ export class Simulation {
       if (distance(contact.pos, target.pos) < 0.72 && contact.attackCooldown <= 0) {
         target.health = clamp(target.health - 4 - this.random() * 3, 0, 100);
         target.stress = clamp(target.stress + 12, 0, 100);
+        this.state.hitSequence += 1;
         contact.attackCooldown = 1.15;
         if (target.health <= 0 && target.state !== "down") {
           target.state = "down";
@@ -426,24 +464,29 @@ export class Simulation {
     }
   }
 
-  private updateCache(dt: number): void {
-    if (this.state.cacheSecured) return;
-    const collector = this.state.units.find((unit) =>
-      unit.state === "collecting"
-      && unit.interaction === "cache"
-      && distance(unit.pos, this.state.map.cache) < 2.1,
-    );
-    if (collector) this.state.cacheProgress = clamp(this.state.cacheProgress + dt * (0.026 + collector.scavengeSkill * 0.00042), 0, 1);
-    if (this.state.cacheProgress >= 1) {
-      this.state.cacheSecured = true;
-      for (const unit of this.state.units) {
-        if (unit.state === "collecting") unit.state = "holding";
-        if (unit.interaction === "cache") unit.interaction = null;
+  private updateCaches(dt: number): void {
+    for (const cache of this.state.caches) {
+      if (cache.secured) continue;
+      const collector = this.state.units.find((unit) =>
+        unit.state === "collecting"
+        && unit.interaction === cache.id
+        && distance(unit.pos, cache.pos) < 2.1,
+      );
+      if (collector) cache.progress = clamp(cache.progress + dt * (0.065 + collector.scavengeSkill * 0.00055), 0, 1);
+      if (cache.progress >= 1) {
+        cache.secured = true;
+        this.state.cacheSequence += 1;
+        for (const unit of this.state.units) {
+          if (unit.interaction !== cache.id) continue;
+          if (unit.state === "collecting") unit.state = "holding";
+          unit.interaction = null;
+        }
+        const recovered = this.state.caches.filter((candidate) => candidate.secured).length;
+        this.pushEvent("SQUAD", `Cache ${recovered} of ${this.state.caches.length} secured. Extract now or continue.`, "good");
+      } else if (cache.progress > 0.45 && !this.cacheAnnounced.has(cache.id)) {
+        this.cacheAnnounced.add(cache.id);
+        this.pushEvent(collector?.name ?? "SQUAD", "Cache transfer at fifty percent.", "good");
       }
-      this.pushEvent("SQUAD", "Objective secured. Return to extraction.", "good");
-    } else if (this.state.cacheProgress > 0.45 && !this.cacheAnnounced) {
-      this.cacheAnnounced = true;
-      this.pushEvent(collector?.name ?? "SQUAD", "Cache transfer at fifty percent.", "good");
     }
   }
 

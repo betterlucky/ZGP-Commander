@@ -38,6 +38,16 @@ const assignmentProduction: Partial<Record<BaseAssignment, CampaignResources>> =
 
 const clone = <T>(value: T): T => structuredClone(value);
 
+const weaponAmmoAdjustment: Record<PersonRecord["weapon"], number> = {
+  rifle: 1,
+  shotgun: 0,
+  smg: 2,
+  carbine: 0,
+};
+
+export const deploymentAmmoCost = (offer: MissionOffer, person: Pick<PersonRecord, "weapon">): number =>
+  offer.ammoCostPerSurvivor + weaponAmmoAdjustment[person.weapon];
+
 export const createInitialCampaignState = (): CampaignState => ({
   schemaVersion: 1,
   day: 1,
@@ -58,6 +68,14 @@ export class Campaign {
 
   constructor(state: CampaignState = createInitialCampaignState()) {
     this.state = clone(state);
+    for (const person of this.state.people) delete (person as PersonRecord & { readiness?: number }).readiness;
+    const migrateOffer = (offer: MissionOffer): void => {
+      const legacy = offer as MissionOffer & { recommendedSquad?: number };
+      if (!Number.isFinite(offer.protocolSquad)) offer.protocolSquad = legacy.recommendedSquad ?? 4;
+      delete legacy.recommendedSquad;
+    };
+    for (const offer of this.state.missionOffers) migrateOffer(offer);
+    for (const operation of this.state.operations) migrateOffer(operation.offer);
   }
 
   public snapshot(): CampaignState {
@@ -118,7 +136,8 @@ export class Campaign {
     for (const personId of uniqueIds) {
       if (!available.has(personId)) throw new Error(`${this.requirePerson(personId).name} is not available.`);
     }
-    const ammunition = uniqueIds.length * offer.ammoCostPerSurvivor;
+    const people = uniqueIds.map((id) => this.requirePerson(id));
+    const ammunition = people.reduce((total, person) => total + deploymentAmmoCost(offer, person), 0);
     if (this.state.resources.ammunition < ammunition) throw new Error(`Deployment requires ${ammunition} ammunition.`);
     this.state.resources.ammunition -= ammunition;
     this.state.actedPersonIds.push(...uniqueIds);
@@ -133,7 +152,7 @@ export class Campaign {
     };
     this.state.operations.push(operation);
     this.addEvent("normal", `${offer.title} launched with ${uniqueIds.length} survivor${uniqueIds.length === 1 ? "" : "s"}.`);
-    return { operationId: operation.id, offer: clone(offer), people: uniqueIds.map((id) => clone(this.requirePerson(id))) };
+    return { operationId: operation.id, offer: clone(offer), people: people.map(clone) };
   }
 
   public resumeDeployment(operationId: string): Deployment {
@@ -151,7 +170,9 @@ export class Campaign {
     if (!operation || operation.status !== "deployed") throw new Error("Operation is not awaiting resolution.");
     operation.status = "resolved";
     operation.result = clone(outcome);
-    const rewardScale = outcome.objectiveCompleted ? 1 : outcome.success ? 0.45 : 0;
+    const rewardScale = outcome.success && outcome.cacheCount > 0
+      ? Math.max(0, Math.min(1, outcome.cachesRecovered / outcome.cacheCount))
+      : 0;
     const reward = scaledReward(operation.offer.reward, rewardScale);
     addResources(this.state.transit, reward);
 
@@ -163,7 +184,6 @@ export class Campaign {
       const health = outcome.healthByPersonId[personId] ?? 100;
       if (outcome.downPersonIds.includes(personId)) this.resolveDownedPerson(person, operation);
       else if (health < 58) this.addInjury(person, "minor", "Concussion", "accuracy", -0.08, 2);
-      person.readiness = Math.max(0, person.readiness - (operation.offer.permadeath ? 18 : 10));
     }
 
     if (outcome.objectiveCompleted && operation.offer.kind === "rescue") {
@@ -186,13 +206,10 @@ export class Campaign {
       if (acted.has(person.id)) continue;
       const production = assignmentProduction[person.assignment];
       if (production) addResources(produced, production);
-      if (person.assignment === "training") person.readiness = Math.min(100, person.readiness + 8);
-      if (person.assignment === "general") person.readiness = Math.min(100, person.readiness + 3);
       if (person.assignment === "recovery" && person.injuries.length) {
         for (const injury of person.injuries) injury.recoveryDays -= 1;
         const before = person.injuries.length;
         person.injuries = person.injuries.filter((injury) => injury.recoveryDays > 0);
-        person.readiness = Math.min(100, person.readiness + 12);
         if (person.injuries.length < before) recoveredPeople.push(person.name);
       }
     }
@@ -233,7 +250,7 @@ export class Campaign {
         createdDay: this.state.day,
         expiresAfterDay: person.miaExpiresAfterDay ?? this.state.day,
         ammoCostPerSurvivor: 14,
-        recommendedSquad: 6,
+        protocolSquad: 6,
         threat: 0.86 + index * 0.02,
         reward: emptyResources(),
         subjectIds: [person.id],

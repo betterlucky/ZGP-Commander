@@ -110,6 +110,7 @@
 .roster-identity b { color: #d6cebb; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .roster-identity small, .roster-state { color: #77736a; font-size: 6px; }
 .roster-state { justify-self: end; color: var(--base-good); }
+.roster-state.injured { color: var(--base-danger); }
 .roster-row select { grid-column: 2 / 4; width: 100%; height: 24px; border: 1px solid rgba(210,180,120,.15); background: #13150f; color: #918b7d; padding: 0 5px; font: inherit; font-size: 7px; }
 
 .base-eventbar { min-width: 0; display: grid; grid-template-columns: 130px repeat(4,minmax(0,1fr)); align-items: stretch; background: #10110d; border-top: 1px solid var(--base-line); }
@@ -134,7 +135,7 @@
 .risk-text-lethal { color: var(--base-danger) !important; }
 .risk-text-recoverable { color: var(--base-good) !important; }
 .deployment-roster { min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(3,minmax(250px,1fr)); grid-auto-rows: 74px; gap: 8px; padding: 12px; }
-.deployment-person { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 9px; border: 1px solid var(--base-line); background: rgba(220,190,130,.025); color: inherit; text-align: left; cursor: pointer; }
+.deployment-person { display: grid; grid-template-columns: 44px 1fr minmax(72px,auto); align-items: center; gap: 9px; border: 1px solid var(--base-line); background: rgba(220,190,130,.025); color: inherit; text-align: left; cursor: pointer; }
 .deployment-person:hover, .deployment-person.selected { border-color: rgba(var(--base-warm-rgb),.62); background: rgba(var(--base-warm-rgb),.09); box-shadow: inset 3px 0 var(--base-warm); }
 .deployment-avatar { height: 100%; display: grid; place-items: center; border-right: 1px solid var(--base-line); color: var(--base-warm); font-size: 14px; }
 .deployment-person > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
@@ -142,6 +143,10 @@
 .deployment-person small { color: #79756c; font-size: 6px; }
 .deployment-person i { color: #9a8c6e; font-size: 6px; font-style: normal; }
 .deployment-person > strong { padding-right: 10px; color: var(--base-good); font-size: 9px; }
+.deployment-status { align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; padding-right: 10px; }
+.deployment-status b { color: var(--base-good); font-size: 9px; }
+.deployment-status small { color: var(--base-warm); font-size: 8px; }
+.deployment-status.injured b { color: var(--base-danger); }
 .deployment-dialog > footer { display: grid; grid-template-columns: 1.7fr .8fr 220px; align-items: stretch; border-top: 1px solid var(--base-line); }
 .deployment-dialog > footer div { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 16px; border-right: 1px solid var(--base-line); }
 .deployment-dialog > footer b { color: #bdb49f; font-size: 8px; }
@@ -173,5 +178,6 @@
 .base-eventbar > span { font-size: 10px; }
 .deployment-dialog > header small, .deployment-brief small, .deployment-dialog footer small { font-size: 9px; }
 .deployment-brief b, .deployment-brief p, .deployment-dialog > footer b { font-size: 10px; }
-.deployment-person b, .deployment-person > strong { font-size: 11px; }
+.deployment-person b, .deployment-person > strong, .deployment-status b { font-size: 11px; }
 .deployment-person small, .deployment-person i { font-size: 9px; }
+.deployment-status small { font-size: 10px; }

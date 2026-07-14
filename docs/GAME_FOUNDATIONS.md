@@ -2,7 +2,7 @@
 
 Status: **authoritative direction, with tuning values intentionally provisional**
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## High-level pitch
 
@@ -78,6 +78,22 @@ Danger comes from voluntarily compromising that readiness:
 Tight sections may exist as local hazards, shortcuts or high-value areas, but
 they are not the default encounter geometry. Threats should not routinely appear
 inside the player's reasonable reaction envelope.
+
+Squads arrive at an exterior landing point, open a marked breach into the site
+and withdraw through that landing point unless another extraction route is
+explicitly discovered. Ambient reinforcements enter at perimeter points with a
+minimum safe separation from the squad; fresh contacts do not appear inside the
+player's immediate reaction envelope.
+
+Resource-recovery sites contain several recoverable caches. Once the squad has
+secured any cache, the player may withdraw with that partial salvage or continue
+deeper for a larger share of the declared reward. A single-cache retrieval is
+reserved for a deliberate gauntlet, rescue-like objective or eventual tutorial,
+not the standard supply mission.
+
+Warehouse fixtures communicate their tactical effect consistently. Tall solid
+fixtures such as shelving block movement and sight; low pallets and crate stacks
+block movement while preserving sight over them.
 
 Oversized squads remain legal and powerful. An eight-person revenge deployment
 can be fun and effective. Its cost is ammunition, exposed people and sacrificed

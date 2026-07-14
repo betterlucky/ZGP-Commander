@@ -1,4 +1,4 @@
-import type { Campaign } from "../campaign/campaign";
+import { deploymentAmmoCost, type Campaign } from "../campaign/campaign";
 import type { CampaignStore } from "../campaign/store";
 import type { BaseAssignment, Deployment, EndDayReport, MissionOffer, PersonRecord } from "../campaign/types";
 
@@ -38,6 +38,13 @@ const reportText = (report: EndDayReport): string => {
   const produced = report.produced.materials + report.produced.ammunition + report.produced.medical;
   const received = report.received.materials + report.received.ammunition + report.received.medical + report.received.comforts;
   return `Day ${report.completedDay} resolved: ${produced} base output, ${received} field resources received${report.recoveredPeople.length ? `, ${report.recoveredPeople.join(", ")} recovered` : ""}.`;
+};
+
+const conditionLabel = (person: PersonRecord): string => {
+  const major = person.injuries.filter((injury) => injury.severity === "major").length;
+  if (major) return major > 1 ? `${major} MAJOR INJURIES` : "MAJOR INJURY";
+  if (person.injuries.length) return person.injuries.length > 1 ? `${person.injuries.length} INJURIES` : "INJURED";
+  return "HEALTHY";
 };
 
 export const mountBaseScreen = (
@@ -136,7 +143,7 @@ export const mountBaseScreen = (
                 <article class="roster-row tier-${person.tier} ${acted.has(person.id) ? "acted" : ""}">
                   <span class="roster-mark">${person.callsign.slice(0, 1)}</span>
                   <span class="roster-identity"><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role} · ${person.weapon.toUpperCase()}</small></span>
-                  <span class="roster-state">${acted.has(person.id) ? "DEPLOYED" : person.injuries.some((injury) => injury.severity === "major") ? "RECOVERING" : `${person.readiness}% READY`}</span>
+                  <span class="roster-state ${person.injuries.length ? "injured" : ""}">${acted.has(person.id) ? "DEPLOYED" : conditionLabel(person)}</span>
                   <select data-assignment="${person.id}" aria-label="${escapeHtml(person.name)} assignment" ${acted.has(person.id) ? "disabled" : ""}>
                     ${(Object.keys(assignmentLabels) as BaseAssignment[]).map((assignment) => `<option value="${assignment}" ${person.assignment === assignment ? "selected" : ""}>${assignmentLabels[assignment]}</option>`).join("")}
                   </select>
@@ -239,14 +246,10 @@ const renderDeploymentPlanner = (
   availableAmmo: number,
 ): string => {
   const selected = available.filter((person) => selectedPeople.has(person.id));
-  const ammoCost = selected.length * offer.ammoCostPerSurvivor;
-  const squadAssessment = selected.length === 0
-    ? "Select the people whose primary action will be consumed."
-    : selected.length < offer.recommendedSquad
-      ? `Under recommended strength by ${offer.recommendedSquad - selected.length}.`
-      : selected.length > offer.recommendedSquad
-        ? `${selected.length - offer.recommendedSquad} above recommendation; reward is unchanged.`
-        : "Matches the recommended field strength.";
+  const ammoCost = selected.reduce((total, person) => total + deploymentAmmoCost(offer, person), 0);
+  const missionProtocol = offer.kind === "rescue" ? "rescue" : offer.kind;
+  const difference = selected.length - offer.protocolSquad;
+  const squadProtocol = `Standard protocol suggests a team of ${offer.protocolSquad} for ${missionProtocol} missions. ${difference === 0 ? "Protocol strength selected." : difference < 0 ? `${Math.abs(difference)} fewer currently selected.` : `${difference} additional currently selected.`}`;
   return `
     <section class="deployment-overlay">
       <div class="deployment-dialog">
@@ -261,13 +264,13 @@ const renderDeploymentPlanner = (
           ${available.map((person) => `
             <button class="deployment-person ${selectedPeople.has(person.id) ? "selected" : ""}" data-person="${person.id}" type="button">
               <span class="deployment-avatar">${person.callsign.slice(0, 1)}</span>
-              <span><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role}</small><i>${person.weapon.toUpperCase()} · leaving ${assignmentLabels[person.assignment]}</i></span>
-              <strong>${person.readiness}%</strong>
+              <span><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role}</small><i>${person.weapon.toUpperCase()} · ${assignmentLabels[person.assignment]}</i></span>
+              <span class="deployment-status ${person.injuries.length ? "injured" : ""}"><b>${conditionLabel(person)}</b><small>${deploymentAmmoCost(offer, person)} AMMO</small></span>
             </button>
           `).join("")}
         </div>
         <footer>
-          <div><small>SQUAD ASSESSMENT</small><b>${squadAssessment}</b></div>
+          <div><small>DEPLOYMENT PROTOCOL</small><b>${squadProtocol}</b></div>
           <div><small>DEPLOYMENT AMMUNITION</small><b class="${ammoCost > availableAmmo ? "insufficient" : ""}">${ammoCost} / ${availableAmmo}</b></div>
           <button class="warm-button" id="launch-operation" type="button" ${selected.length === 0 || ammoCost > availableAmmo ? "disabled" : ""}>ESTABLISH GHOSTLINK</button>
         </footer>

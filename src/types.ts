@@ -29,7 +29,7 @@ export interface Unit {
   phase: number;
   selected: boolean;
   state: UnitState;
-  interaction: "cache" | null;
+  interaction: string | null;
   weapon: "rifle" | "shotgun" | "smg" | "carbine";
   shotFlash: number;
   shotCooldown: number;
@@ -71,12 +71,31 @@ export interface WallSegment {
 }
 
 export interface Prop {
-  kind: "desk" | "bed" | "shelf" | "chair" | "crate" | "terminal";
+  kind: "desk" | "bed" | "shelf" | "chair" | "crate" | "pallet" | "terminal";
   x: number;
   y: number;
   w: number;
   h: number;
   rotation?: number;
+  blocksMovement: boolean;
+  blocksVision: boolean;
+}
+
+export interface CacheSite {
+  id: string;
+  pos: Vec2;
+}
+
+export interface CacheState extends CacheSite {
+  progress: number;
+  secured: boolean;
+}
+
+export interface BreachPoint {
+  pos: Vec2;
+  insideCell: Vec2;
+  outsideCell: Vec2;
+  open: boolean;
 }
 
 export interface FacilityMap {
@@ -85,9 +104,14 @@ export interface FacilityMap {
   rooms: Room[];
   walls: WallSegment[];
   props: Prop[];
-  cache: Vec2;
+  caches: CacheSite[];
+  insertion: Vec2;
   extraction: Vec2;
+  breach: BreachPoint;
+  contactSpawns: Vec2[];
   walkable: Set<string>;
+  movementBlocked: Set<string>;
+  visionBlocked: Set<string>;
 }
 
 export interface EventEntry {
@@ -101,8 +125,8 @@ export interface SimulationState {
   paused: boolean;
   elapsed: number;
   threat: number;
-  cacheProgress: number;
-  cacheSecured: boolean;
+  caches: CacheState[];
+  breachOpen: boolean;
   scanAngle: number;
   signalPulse: number;
   missionTitle: string;
@@ -110,6 +134,11 @@ export interface SimulationState {
   riskLabel: string;
   missionStatus: "active" | "success" | "failure";
   contactsNeutralised: number;
+  shotSequence: number;
+  killSequence: number;
+  hitSequence: number;
+  breachSequence: number;
+  cacheSequence: number;
   units: Unit[];
   contacts: Contact[];
   map: FacilityMap;
@@ -131,6 +160,7 @@ export interface TacticalSetup {
   objectiveLabel: string;
   riskLabel: string;
   threat: number;
+  cacheCount?: number;
   units: TacticalUnitSetup[];
 }
 
@@ -142,6 +172,8 @@ export interface TacticalOutcome {
   healthByPersonId: Record<string, number>;
   ammunitionRemaining: number;
   contactsNeutralised: number;
+  cachesRecovered: number;
+  cacheCount: number;
 }
 
 export interface Camera {

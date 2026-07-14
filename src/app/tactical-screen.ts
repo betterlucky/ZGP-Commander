@@ -1,4 +1,5 @@
 import { distance, formatTime } from "../math";
+import { tacticalAudio } from "../audio";
 import { GpuLidarRenderer } from "../renderers/gpu-lidar";
 import { LidarRenderer } from "../renderers/lidar";
 import { makeIsoTransform } from "../renderers/shared";
@@ -43,6 +44,7 @@ export const mountTacticalScreen = (
     objectiveLabel: deployment.offer.objective,
     riskLabel: deployment.offer.risk,
     threat: deployment.offer.threat,
+    cacheCount: deployment.offer.kind === "rescue" ? 1 : 6,
     units: deployment.people.map((person) => ({
       personId: person.id,
       name: person.callsign,
@@ -53,6 +55,11 @@ export const mountTacticalScreen = (
       scavengeSkill: Math.min(99, baseScavengeSkill[person.role] + Math.min(14, person.career.missions * 2)),
     })),
   });
+  const lastAmmo = new Map(simulation.state.units.map((unit) => [unit.id, unit.ammo]));
+  let lastKillSequence = 0;
+  let lastHitSequence = 0;
+  let lastBreachSequence = 0;
+  let lastCacheSequence = 0;
 
   root.innerHTML = `
     <main class="shell tactical-shell">
@@ -67,7 +74,8 @@ export const mountTacticalScreen = (
         <aside class="left-panel panel">
           <section class="panel-section objective-section">
             <div class="section-title"><span>OBJECTIVE</span><small>${deployment.offer.risk}</small></div>
-            <div class="objective active"><span class="objective-icon">◇</span><div><strong>CACHE TRANSFER <b id="cache-fraction">0%</b></strong><small id="cache-copy">Right-click the cache to assign the best scavenger</small></div></div>
+            <div class="objective active"><span class="objective-icon">⬡</span><div><strong id="breach-heading">ENTRY BREACH CLOSED</strong><small id="breach-copy">Press F to open the marked entry</small></div></div>
+            <div class="objective active"><span class="objective-icon">◇</span><div><strong>SALVAGE <b id="cache-fraction">0 / 0</b></strong><small id="cache-copy">Breach, then right-click a cache to recover it</small></div></div>
             <div class="progress"><i id="cache-progress"></i></div>
             <div class="objective ready"><span class="objective-icon">⌂</span><div><strong id="extraction-heading">EXTRACTION MARKED</strong><small id="extraction-copy">Return every standing survivor to the marked zone</small></div></div>
             <button class="extract-button" id="extract-button" type="button">CALL EXTRACTION</button>
@@ -76,15 +84,16 @@ export const mountTacticalScreen = (
           <section class="panel-section order-section">
             <div class="section-title"><span>HIGH LEVEL ORDERS</span><small id="selected-count">1 UNIT</small></div>
             <button class="order-button primary" id="move-order" type="button"><kbd>RMB</kbd><span><b>MOVE / INTERACT</b><small>Right-click ground or cache</small></span></button>
+            <button class="order-button" id="breach-order" type="button"><kbd>F</kbd><span><b>BREACH ENTRY</b><small>Open the landing-zone access</small></span></button>
             <button class="order-button" id="hold-order" type="button"><kbd>H</kbd><span><b>HOLD POSITION</b><small>Stop and engage</small></span></button>
             <button class="order-button" id="reload-order" type="button"><kbd>R</kbd><span><b>RELOAD</b><small>Stationary until complete</small></span></button>
-            <button class="order-button" id="select-all" type="button"><kbd>A</kbd><span><b>SELECT SQUAD</b><small>Retask as formation</small></span></button>
+            <button class="order-button" id="select-all" type="button"><kbd>^A</kbd><span><b>SELECT SQUAD</b><small>Retask as formation</small></span></button>
           </section>
 
           <section class="panel-section layer-section">
             <div class="section-title"><span>RENDER PIPELINE</span><small>LIVE</small></div>
             <div class="pipeline-card"><span class="pipeline-mark">G</span><div><b>GHOSTLINK</b><small id="pipeline-backend">WEBGL2 POINT BUFFER</small></div><span class="pipeline-state">ONLINE</span></div>
-            <div class="sensor-readout"><span><i></i> FLOORPLAN</span><span><i></i> MOTION</span><span><i></i> AUDIO</span><span><i></i> CONTACTS</span></div>
+            <div class="sensor-readout"><span class="solid-cover"><i></i> SOLID / LOS BLOCK</span><span class="low-cover"><i></i> LOW / MOVE BLOCK</span><span><i></i> AUDIO</span><span><i></i> CONTACTS</span></div>
           </section>
         </aside>
 
@@ -95,7 +104,7 @@ export const mountTacticalScreen = (
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
-          <div class="retask-hint" id="retask-hint">DRAG SELECT · RIGHT-CLICK MOVE / SCAVENGE · MIDDLE-DRAG PAN</div>
+          <div class="retask-hint" id="retask-hint">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · 1–9 FOCUS</div>
           <div class="performance-hud" id="performance-hud">
             <span><small>FPS</small><b id="perf-fps">--</b></span><span><small>STATIC PTS</small><b id="perf-static">--</b></span><span><small>DYNAMIC PTS</small><b id="perf-dynamic">--</b></span><span><small>CONTACTS</small><b id="perf-contacts">--</b></span><span><small>DRAW CALLS</small><b id="perf-draws">2</b></span>
           </div>
@@ -126,6 +135,7 @@ export const mountTacticalScreen = (
   let lastUiUpdate = 0;
   let animationFrame = 0;
   let resolved = false;
+  const resumeAudio = (): void => tacticalAudio.resume();
   let selectionDrag: { start: Vec2; current: Vec2; additive: boolean } | null = null;
   let panDrag: { start: Vec2; panX: number; panY: number } | null = null;
 
@@ -167,9 +177,13 @@ export const mountTacticalScreen = (
     get("#threat-fill").style.width = `${state.threat * 100}%`;
     get("#contact-count").textContent = livingContacts.toString().padStart(2, "0");
     get("#signal-value").textContent = `${Math.round(89 + Math.sin(state.signalPulse * .8) * 4)}%`;
-    get("#cache-fraction").textContent = state.cacheSecured ? "SECURED" : `${Math.round(state.cacheProgress * 100)}%`;
-    get("#cache-copy").textContent = state.cacheSecured ? "Objective complete. Withdraw the squad." : state.cacheProgress > 0 ? "Assigned scavenger transferring supplies; squad covering" : "Right-click the cache to assign the best scavenger";
-    get("#cache-progress").style.width = `${state.cacheProgress * 100}%`;
+    const recovered = state.caches.filter((cache) => cache.secured).length;
+    const activeCache = state.caches.find((cache) => !cache.secured && cache.progress > 0);
+    get("#breach-heading").textContent = state.breachOpen ? "ENTRY BREACH OPEN" : "ENTRY BREACH CLOSED";
+    get("#breach-copy").textContent = state.breachOpen ? "Interior access available" : "Press F to open the marked entry";
+    get("#cache-fraction").textContent = `${recovered} / ${state.caches.length}`;
+    get("#cache-copy").textContent = recovered === state.caches.length ? "All known caches recovered" : activeCache ? "Assigned scavenger transferring supplies; squad covering" : recovered ? "Extract now with partial salvage or continue" : state.breachOpen ? "Right-click a cache to assign the best scavenger" : "Breach, then recover any cache";
+    get("#cache-progress").style.width = `${(activeCache?.progress ?? (recovered === state.caches.length ? 1 : 0)) * 100}%`;
     get("#timecode").textContent = formatTime(state.elapsed);
     get("#zoom-value").textContent = `${Math.round(camera.zoom * 100)}%`;
     const selected = state.units.filter((unit) => unit.selected).length;
@@ -179,8 +193,8 @@ export const mountTacticalScreen = (
     get("#ammo-total").textContent = state.units.reduce((sum, unit) => sum + unit.ammo + unit.reserveAmmo, 0).toString();
     get("#neutralised").textContent = state.contactsNeutralised.toString();
     const extractReady = simulation.canExtract();
-    get("#extraction-heading").textContent = extractReady ? "SQUAD IN EXTRACTION" : state.cacheSecured ? "RETURN TO EXTRACTION" : "EXTRACTION MARKED";
-    get("#extraction-copy").textContent = state.cacheSecured ? (extractReady ? "Standing survivors ready for pickup" : "Move every standing survivor into the marked zone") : "Secure the objective before withdrawing";
+    get("#extraction-heading").textContent = extractReady ? "SQUAD IN EXTRACTION" : recovered ? "WITHDRAWAL AVAILABLE" : "EXTRACTION MARKED";
+    get("#extraction-copy").textContent = recovered ? (extractReady ? "Standing survivors ready for pickup" : `Return to landing with ${recovered} recovered cache${recovered === 1 ? "" : "s"}`) : "Recover at least one cache before withdrawing";
     get<HTMLButtonElement>("#extract-button").classList.toggle("ready", extractReady);
     if (gpuLidar.available) {
       get("#perf-fps").textContent = Math.round(gpuLidar.stats.fps).toString();
@@ -200,10 +214,27 @@ export const mountTacticalScreen = (
     const result = document.createElement("section");
     result.className = `mission-result ${outcome.success ? "success" : "failure"}`;
     result.innerHTML = `
-      <div><small>GHOSTLINK SESSION CLOSED</small><h1>${outcome.success ? "OPERATION RESOLVED" : "OPERATION FAILED"}</h1><p>${outcome.objectiveCompleted ? "The objective was secured." : "The objective was not secured."} ${outcome.downPersonIds.length ? `${outcome.downPersonIds.length} survivor${outcome.downPersonIds.length === 1 ? " was" : "s were"} down when the link closed.` : "All linked survivors remained standing."}</p><section><span><small>RETURNED</small><b>${outcome.extractedPersonIds.length}</b></span><span><small>DOWN</small><b>${outcome.downPersonIds.length}</b></span><span><small>CONTACTS</small><b>${outcome.contactsNeutralised}</b></span><span><small>AMMO LEFT</small><b>${outcome.ammunitionRemaining}</b></span></section><button class="pause-button" id="return-to-base" type="button">RETURN TO OUTPOST COMMAND</button></div>
+      <div><small>GHOSTLINK SESSION CLOSED</small><h1>${outcome.success ? "OPERATION RESOLVED" : "OPERATION FAILED"}</h1><p>${outcome.cachesRecovered} of ${outcome.cacheCount} caches recovered${outcome.objectiveCompleted ? "; the site was cleared." : "; the squad withdrew with partial salvage."} ${outcome.downPersonIds.length ? `${outcome.downPersonIds.length} survivor${outcome.downPersonIds.length === 1 ? " was" : "s were"} down when the link closed.` : "All linked survivors remained standing."}</p><section><span><small>RETURNED</small><b>${outcome.extractedPersonIds.length}</b></span><span><small>CACHES</small><b>${outcome.cachesRecovered}/${outcome.cacheCount}</b></span><span><small>CONTACTS</small><b>${outcome.contactsNeutralised}</b></span><span><small>AMMO LEFT</small><b>${outcome.ammunitionRemaining}</b></span></section><button class="pause-button" id="return-to-base" type="button">RETURN TO OUTPOST COMMAND</button></div>
     `;
     root.append(result);
     result.querySelector<HTMLButtonElement>("#return-to-base")?.addEventListener("click", handlers.onReturn);
+  };
+
+  const syncAudio = (): void => {
+    const state = simulation.state;
+    for (const unit of state.units) {
+      const previousAmmo = lastAmmo.get(unit.id) ?? unit.ammo;
+      if (unit.ammo < previousAmmo) tacticalAudio.fire(unit.weapon, unit.pos.x / state.map.width * 2 - 1);
+      lastAmmo.set(unit.id, unit.ammo);
+    }
+    if (state.killSequence > lastKillSequence) tacticalAudio.contactDown();
+    if (state.hitSequence > lastHitSequence) tacticalAudio.survivorHit();
+    if (state.breachSequence > lastBreachSequence) tacticalAudio.breach();
+    if (state.cacheSequence > lastCacheSequence) tacticalAudio.cacheSecured();
+    lastKillSequence = state.killSequence;
+    lastHitSequence = state.hitSequence;
+    lastBreachSequence = state.breachSequence;
+    lastCacheSequence = state.cacheSequence;
   };
 
   const frame = (now: number): void => {
@@ -215,6 +246,7 @@ export const mountTacticalScreen = (
     resizeCanvas();
     if (benchmarkMode && gpuLidar.available) simulation.updateBenchmark(dt);
     else simulation.update(dt);
+    syncAudio();
     if (gpuLidar.available) {
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       gpuLidar.render(cssWidth, cssHeight, ratio, simulation.state, camera);
@@ -264,6 +296,13 @@ export const mountTacticalScreen = (
     const movedPoint = nextTransform.toScreen(displayPoint);
     camera.panX += screenPoint.x - movedPoint.x;
     camera.panY += screenPoint.y - movedPoint.y;
+  };
+
+  const centerOnUnit = (unit: Unit): void => {
+    const point = unitScreenPoint(unit);
+    if (!point) return;
+    camera.panX += cssWidth * 0.5 - point.x;
+    camera.panY += cssHeight * 0.5 - point.y;
   };
 
   const updateSelectionBox = (): void => {
@@ -333,8 +372,15 @@ export const mountTacticalScreen = (
     event.preventDefault();
     const worldPoint = toSimulationWorld(canvasPoint(event));
     if (!worldPoint) return;
-    if (distance(worldPoint, simulation.state.map.cache) < 2.8 && !simulation.state.cacheSecured) {
-      const operator = simulation.issueScavenge();
+    if (!simulation.state.breachOpen && worldPoint.y < simulation.state.map.breach.pos.y) {
+      showHint("BREACH ENTRY BEFORE ISSUING INTERIOR ORDERS");
+      return;
+    }
+    const cache = simulation.state.caches
+      .filter((candidate) => !candidate.secured)
+      .sort((a, b) => distance(worldPoint, a.pos) - distance(worldPoint, b.pos))[0];
+    if (cache && distance(worldPoint, cache.pos) < 2.8) {
+      const operator = simulation.issueScavenge(cache.id);
       showHint(operator ? `${operator.name} SCAVENGING · SQUAD COVERING` : "SELECT A STANDING UNIT", !operator);
     } else {
       simulation.issueMove(worldPoint);
@@ -356,11 +402,20 @@ export const mountTacticalScreen = (
   };
 
   const keyHandler = (event: KeyboardEvent): void => {
+    tacticalAudio.resume();
     if (event.key === " ") { event.preventDefault(); simulation.togglePause(); }
-    else if (event.key.toLowerCase() === "a") simulation.selectAll();
+    else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); simulation.selectAll(); }
     else if (event.key.toLowerCase() === "h") simulation.issueHold();
     else if (event.key.toLowerCase() === "r") simulation.issueReload();
-    else if (/^[1-9]$/.test(event.key)) simulation.selectUnit(Number(event.key));
+    else if (event.key.toLowerCase() === "f") showHint(simulation.issueBreach() ? "ENTRY BREACH OPEN" : simulation.state.breachOpen ? "ENTRY ALREADY OPEN" : "SELECT A SURVIVOR AT THE BREACH", !simulation.state.breachOpen);
+    else if (/^[1-9]$/.test(event.key)) {
+      const unit = simulation.state.units.find((candidate) => candidate.id === Number(event.key));
+      if (unit) { simulation.selectUnit(unit.id); centerOnUnit(unit); }
+    }
+    else if (event.key.toLowerCase() === "a") camera.panX += 42;
+    else if (event.key.toLowerCase() === "d") camera.panX -= 42;
+    else if (event.key.toLowerCase() === "w") camera.panY += 42;
+    else if (event.key.toLowerCase() === "s") camera.panY -= 42;
     else if (event.key === "ArrowLeft") camera.panX += 42;
     else if (event.key === "ArrowRight") camera.panX -= 42;
     else if (event.key === "ArrowUp") camera.panY += 42;
@@ -373,6 +428,7 @@ export const mountTacticalScreen = (
   get<HTMLButtonElement>("#hold-order").addEventListener("click", () => simulation.issueHold());
   get<HTMLButtonElement>("#reload-order").addEventListener("click", () => simulation.issueReload());
   get<HTMLButtonElement>("#select-all").addEventListener("click", () => simulation.selectAll());
+  get<HTMLButtonElement>("#breach-order").addEventListener("click", () => showHint(simulation.issueBreach() ? "ENTRY BREACH OPEN" : simulation.state.breachOpen ? "ENTRY ALREADY OPEN" : "SELECT A SURVIVOR AT THE BREACH", !simulation.state.breachOpen));
   get<HTMLButtonElement>("#move-order").addEventListener("click", () => showHint("RIGHT-CLICK GROUND TO MOVE · RIGHT-CLICK CACHE TO SCAVENGE"));
   get<HTMLButtonElement>("#extract-button").addEventListener("click", () => {
     try { showResult(simulation.extract()); }
@@ -387,6 +443,7 @@ export const mountTacticalScreen = (
   canvas.addEventListener("contextmenu", contextMenuHandler);
   canvas.addEventListener("wheel", wheelHandler, { passive: false });
   window.addEventListener("keydown", keyHandler);
+  root.addEventListener("pointerdown", resumeAudio);
   const resizeObserver = new ResizeObserver(resizeCanvas);
   resizeObserver.observe(canvas);
   get("#feed-label").textContent = benchmarkMode ? "GPU BENCHMARK // SYNTHETIC CONTACTS" : gpuLidar.available ? "GPU POINT BUFFER // LIVE SIMULATION" : "CANVAS GHOSTLINK FALLBACK";
@@ -400,6 +457,7 @@ export const mountTacticalScreen = (
     cancelAnimationFrame(animationFrame);
     resizeObserver.disconnect();
     window.removeEventListener("keydown", keyHandler);
+    root.removeEventListener("pointerdown", resumeAudio);
     canvas.removeEventListener("pointerdown", pointerDownHandler);
     canvas.removeEventListener("pointermove", pointerMoveHandler);
     canvas.removeEventListener("pointerup", pointerUpHandler);

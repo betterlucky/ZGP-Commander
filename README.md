@@ -19,8 +19,8 @@ mission consequences and the living outpost command schematic.
   approximately 29,000 environment points, live contacts and two point-cloud
   draw calls. The replicated stress fixture remains available with
   `?benchmark=1`.
-- Automatic combat, routed movement, stationary reloads, objective collection
-  and extraction.
+- Automatic combat, eight-direction routed movement, stationary reloads,
+  multi-cache salvage, exterior breach and partial or full extraction.
 - Mission resolution, injuries, MIA/death states, rescue offers and delayed
   field rewards.
 - End-of-day base production, recovery and expandable support capacity.
@@ -55,11 +55,14 @@ Vite build used by continuous integration.
 - Right-click the floor to move selected survivors in formation.
 - Right-click the marked cache to assign the selected survivor with the best
   scavenging skill; everyone else moves close to cover them.
-- Press `H` to hold, `R` to reload in place, and `Space` to pause.
+- Press `F` to breach the marked entrance, `H` to hold, `R` to reload in place,
+  and `Space` to pause.
+- Use `WASD`, the arrow keys, or middle-drag to pan. Number keys select a survivor
+  and centre the camera on them; `Ctrl/Cmd+A` selects the squad.
 - Use the mouse wheel, `+` / `-`, or the on-screen controls to zoom. Middle-drag
   or use the arrow keys to pan while zoomed in.
-- Secure the marked cache, return every standing survivor to the extraction
-  zone, then call extraction.
+- Secure at least one marked cache, then choose whether to push for more or return
+  every standing survivor to the landing zone and call extraction.
 
 ## Project documentation
 

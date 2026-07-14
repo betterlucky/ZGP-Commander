@@ -10,6 +10,8 @@ const successfulOutcome = (personIds: string[]): MissionOutcome => ({
   healthByPersonId: Object.fromEntries(personIds.map((id) => [id, 100])),
   ammunitionRemaining: 10,
   contactsNeutralised: 12,
+  cachesRecovered: 4,
+  cacheCount: 4,
 });
 
 describe("Campaign operational day", () => {
@@ -35,6 +37,21 @@ describe("Campaign operational day", () => {
     campaign.endDay();
     expect(campaign.state.resources.materials).toBeGreaterThan(initialMaterials);
     expect(campaign.state.transit.materials).toBe(0);
+  });
+
+  it("awards salvage in proportion to caches recovered", () => {
+    const campaign = new Campaign();
+    const offer = campaign.availableOffers()[0];
+    const person = campaign.availablePeople()[0];
+    const deployment = campaign.deploy(offer.id, [person.id]);
+    campaign.resolveOperation(deployment.operationId, {
+      ...successfulOutcome([person.id]),
+      objectiveCompleted: false,
+      cachesRecovered: 2,
+      cacheCount: 4,
+    });
+
+    expect(campaign.state.transit.materials).toBe(Math.round(offer.reward.materials * 0.5));
   });
 
   it("resolves persistent base assignments for people who did not deploy", () => {
@@ -89,5 +106,20 @@ describe("Campaign operational day", () => {
     const normalOffers = campaign.availableOffers().filter((offer) => offer.kind !== "rescue");
     expect(normalOffers).toHaveLength(3);
     expect(new Set(normalOffers.map((offer) => offer.title)).size).toBe(3);
+  });
+
+  it("removes legacy readiness and migrates recommended squad saves to protocol strength", () => {
+    const state = createInitialCampaignState();
+    const legacyPerson = state.people[0] as typeof state.people[number] & { readiness?: number };
+    legacyPerson.readiness = 88;
+    const legacyOffer = state.missionOffers[0] as typeof state.missionOffers[number] & { recommendedSquad?: number };
+    legacyOffer.recommendedSquad = legacyOffer.protocolSquad;
+    delete (legacyOffer as Partial<typeof legacyOffer>).protocolSquad;
+
+    const campaign = new Campaign(state);
+
+    expect("readiness" in campaign.state.people[0]).toBe(false);
+    expect(campaign.state.missionOffers[0].protocolSquad).toBe(4);
+    expect("recommendedSquad" in campaign.state.missionOffers[0]).toBe(false);
   });
 });

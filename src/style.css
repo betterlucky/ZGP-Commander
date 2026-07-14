@@ -84,6 +84,8 @@ button { font: inherit; color: inherit; }
 .sensor-readout { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; font-size: 8px; color: #6d858c; }
 .sensor-readout span { display: flex; align-items: center; gap: 6px; }
 .sensor-readout i { width: 6px; height: 6px; background: var(--good); box-shadow: 0 0 5px var(--good); }
+.sensor-readout .solid-cover i { background: #70d4e2; box-shadow: 0 0 5px #70d4e2; }
+.sensor-readout .low-cover i { background: #b79b50; box-shadow: 0 0 5px #b79b50; }
 .help-section p { margin: 6px 0; color: #61777d; font-size: 8px; line-height: 1.5; }
 .help-section b { color: #a9bec4; }
 

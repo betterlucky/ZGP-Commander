@@ -121,6 +121,7 @@ const propHeight: Record<Prop["kind"], number> = {
   shelf: 1.42,
   chair: 0.62,
   crate: 0.72,
+  pallet: 0.38,
   terminal: 1.08,
 };
 
@@ -250,7 +251,9 @@ export class GpuLidarRenderer {
     this.drawSectorLabels(ctx, transform);
     this.drawOrders(ctx, state, transform);
     this.drawObjectives(ctx, state, transform);
-    for (const unit of state.units) this.drawUnitOverlay(ctx, unit, transform);
+    const labels: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+    const units = [...state.units].sort((a, b) => Number(a.selected) - Number(b.selected));
+    for (const unit of units) this.drawUnitOverlay(ctx, unit, transform, labels);
     this.drawScanOverlay(ctx, width, height, state);
   }
 
@@ -270,7 +273,6 @@ export class GpuLidarRenderer {
     const output: number[] = [];
     const floorColor: readonly [number, number, number] = [0.24, 0.52, 0.62];
     const wallColor: readonly [number, number, number] = [0.28, 0.66, 0.76];
-    const propColor: readonly [number, number, number] = [0.22, 0.52, 0.60];
     const walkable = [...this.map.walkable].map((cell) => cell.split(",").map(Number) as [number, number]);
     for (let quadrantY = 0; quadrantY < this.sectorCount; quadrantY += 1) {
       for (let quadrantX = 0; quadrantX < this.sectorCount; quadrantX += 1) {
@@ -287,6 +289,7 @@ export class GpuLidarRenderer {
         }
         for (let wallIndex = 0; wallIndex < this.map.walls.length; wallIndex += 1) {
           const wall = this.map.walls[wallIndex];
+          if (wall.door) continue;
           for (let sample = 0; sample <= 7; sample += 1) {
             const t = sample / 7;
             const x = offsetX + wall.a.x + (wall.b.x - wall.a.x) * t;
@@ -301,7 +304,9 @@ export class GpuLidarRenderer {
           const prop = this.map.props[propIndex];
           const random = mulberry32(8100 + propIndex * 89 + sectorSeed * 301);
           const height = propHeight[prop.kind];
-          for (let sample = 0; sample < 48; sample += 1) {
+          const currentPropColor: readonly [number, number, number] = prop.blocksVision ? [0.38, 0.85, 0.9] : prop.blocksMovement ? [0.9, 0.62, 0.18] : [0.22, 0.46, 0.52];
+          const sampleCount = Math.max(64, Math.ceil((prop.w + prop.h) * 24));
+          for (let sample = 0; sample < sampleCount; sample += 1) {
             const edge = Math.floor(random() * 4);
             let localX = (random() - 0.5) * prop.w;
             let localY = (random() - 0.5) * prop.h;
@@ -315,7 +320,8 @@ export class GpuLidarRenderer {
             const x = offsetX + prop.x + prop.w / 2 + localX * cos - localY * sin;
             const y = offsetY + prop.y + prop.h / 2 + localX * sin + localY * cos;
             const z = random() > 0.54 ? height : random() * height;
-            pushPoint(output, x, y, z, propColor, 0.13 + random() * 0.3, 0.62 + random() * 0.8);
+            const emphasis = prop.blocksMovement ? 1 : 0.55;
+            pushPoint(output, x, y, z, currentPropColor, (0.2 + random() * 0.34) * emphasis, 0.8 + random() * 0.8);
           }
         }
       }
@@ -459,10 +465,11 @@ export class GpuLidarRenderer {
         const originX = contact.pos.x + this.displayOffset.x;
         const originY = contact.pos.y + this.displayOffset.y;
         const fade = contact.alive ? 1 : Math.min(1, contact.hitFlash);
+        const flash = Math.min(1, contact.hitFlash);
         for (const point of points) {
           const x = originX + point.x * cos - point.y * sin;
           const y = originY + point.x * sin + point.y * cos;
-          write(x, y, point.z + Math.sin(time * 3 + contact.phase) * 0.025, 1, 0.045, 0.018, point.alpha * contact.confidence * fade, point.size * 3.35);
+          write(x, y, point.z + Math.sin(time * 3 + contact.phase) * 0.025, 1, 0.045 + flash * 0.72, 0.018 + flash * 0.38, point.alpha * contact.confidence * fade, point.size * (3.35 + flash * 1.2));
         }
       }
       this.stats.contacts = activeContacts.filter((contact) => contact.alive).length;
@@ -516,16 +523,28 @@ export class GpuLidarRenderer {
   }
 
   private drawObjectives(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
-    const cache = transform.toScreen(this.offsetPoint(state.map.cache), 0.3);
     const extraction = transform.toScreen(this.offsetPoint(state.map.extraction), 0.03);
-    ctx.save(); ctx.strokeStyle = "rgba(255,187,61,.9)"; ctx.shadowColor = "#ffb83d"; ctx.shadowBlur = 8; ctx.lineWidth = 1.2;
-    ctx.strokeRect(cache.x - 5, cache.y - 4, 10, 8);
-    ctx.beginPath(); ctx.arc(cache.x, cache.y, 8 + Math.sin(state.elapsed * 3), 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.shadowBlur = 8; ctx.lineWidth = 1.2;
+    for (const [index, site] of state.caches.entries()) {
+      const cache = transform.toScreen(this.offsetPoint(site.pos), 0.3);
+      ctx.strokeStyle = site.secured ? "rgba(102,165,155,.38)" : "rgba(255,187,61,.92)";
+      ctx.shadowColor = site.secured ? "#5ba99b" : "#ffb83d";
+      ctx.strokeRect(cache.x - 5, cache.y - 4, 10, 8);
+      ctx.beginPath(); ctx.arc(cache.x, cache.y, 8 + (site.secured ? 0 : Math.sin(state.elapsed * 3)), 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = site.secured ? "rgba(110,175,165,.7)" : "#ffc15a";
+      ctx.font = "700 8px monospace"; ctx.textAlign = "center"; ctx.fillText(`${index + 1}`, cache.x, cache.y - 11);
+    }
+    const breach = transform.toScreen(this.offsetPoint(state.map.breach.pos), 0.08);
+    ctx.strokeStyle = state.breachOpen ? "rgba(77,238,207,.85)" : "rgba(255,105,78,.95)";
+    ctx.shadowColor = state.breachOpen ? "#4deecf" : "#ff5a45";
+    ctx.strokeRect(breach.x - 9, breach.y - 5, 18, 10);
+    ctx.fillStyle = state.breachOpen ? "#4deecf" : "#ff7b64"; ctx.font = "700 8px monospace";
+    ctx.fillText(state.breachOpen ? "OPEN" : "F BREACH", breach.x, breach.y - 9);
     ctx.strokeStyle = "rgba(77,238,207,.85)"; ctx.shadowColor = "#4deecf";
     ctx.beginPath(); ctx.ellipse(extraction.x, extraction.y, 13, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
   }
 
-  private drawUnitOverlay(ctx: CanvasRenderingContext2D, unit: Unit, transform: IsoTransform): void {
+  private drawUnitOverlay(ctx: CanvasRenderingContext2D, unit: Unit, transform: IsoTransform, labels: Array<{ left: number; top: number; right: number; bottom: number }>): void {
     const point = transform.toScreen(this.offsetPoint(unit.pos), 2.45);
     const ground = transform.toScreen(this.offsetPoint(unit.pos), 0.02);
     ctx.save();
@@ -537,9 +556,21 @@ export class GpuLidarRenderer {
     const label = `${unit.id}  ${unit.name}  ·  ${unit.role}`;
     ctx.font = "700 9px monospace";
     const width = Math.max(82, ctx.measureText(label).width + 12);
-    ctx.fillStyle = "rgba(2,8,12,.9)"; ctx.fillRect(point.x - width / 2, point.y - 11, width, 15);
-    ctx.strokeStyle = "rgba(95,225,250,.36)"; ctx.strokeRect(point.x - width / 2, point.y - 11, width, 15);
-    ctx.fillStyle = "#83ecff"; ctx.textAlign = "center"; ctx.fillText(label, point.x, point.y);
+    let labelY = point.y;
+    let bounds = { left: point.x - width / 2, top: labelY - 11, right: point.x + width / 2, bottom: labelY + 4 };
+    while (labels.some((other) => bounds.left < other.right && bounds.right > other.left && bounds.top < other.bottom && bounds.bottom > other.top)) {
+      labelY -= 17;
+      bounds = { ...bounds, top: labelY - 11, bottom: labelY + 4 };
+    }
+    labels.push(bounds);
+    ctx.fillStyle = "rgba(2,8,12,.92)"; ctx.fillRect(bounds.left, bounds.top, width, 15);
+    ctx.strokeStyle = unit.selected ? "rgba(110,239,255,.9)" : "rgba(95,225,250,.36)"; ctx.strokeRect(bounds.left, bounds.top, width, 15);
+    ctx.fillStyle = "#83ecff"; ctx.textAlign = "center"; ctx.fillText(label, point.x, labelY);
+    if (unit.shotFlash > 0) {
+      const muzzle = transform.toScreen(this.offsetPoint({ x: unit.pos.x + Math.cos(unit.facing) * 1.35, y: unit.pos.y + Math.sin(unit.facing) * 1.35 }), 1.35);
+      ctx.fillStyle = `rgba(255,235,165,${unit.shotFlash})`; ctx.shadowColor = "#fff0a8"; ctx.shadowBlur = 16;
+      ctx.beginPath(); ctx.arc(muzzle.x, muzzle.y, 3 + unit.shotFlash * 3, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
 

@@ -36,7 +36,6 @@ export interface PersonRecord {
   injuries: InjuryRecord[];
   assignment: BaseAssignment;
   weapon: WeaponId;
-  readiness: number;
   miaExpiresAfterDay: number | null;
   career: CareerRecord;
   history: string[];
@@ -71,7 +70,7 @@ export interface MissionOffer {
   createdDay: number;
   expiresAfterDay: number;
   ammoCostPerSurvivor: number;
-  recommendedSquad: number;
+  protocolSquad: number;
   threat: number;
   reward: MissionReward;
   subjectIds: string[];
@@ -97,6 +96,8 @@ export interface MissionOutcome {
   healthByPersonId: Record<string, number>;
   ammunitionRemaining: number;
   contactsNeutralised: number;
+  cachesRecovered: number;
+  cacheCount: number;
 }
 
 export interface CampaignEvent {
@@ -135,4 +136,3 @@ export interface EndDayReport {
   expiredMia: string[];
   newDay: number;
 }
-
