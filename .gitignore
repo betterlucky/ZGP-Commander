@@ -4,3 +4,7 @@ dist/
 coverage/
 *.log
 .DS_Store
+work/
+docs/video/capture/
+docs/video/*.mp4
+docs/video/voiceover/*.mp3

@@ -219,6 +219,7 @@ export const mountBaseScreen = (
       selectedPeople.clear();
       for (const person of campaign.availablePeople().slice(0, offer.protocolSquad)) selectedPeople.add(person.id);
       render();
+      root.querySelector<HTMLButtonElement>("#launch-operation")?.focus();
     });
     root.querySelector<HTMLButtonElement>("#launch-operation")?.addEventListener("click", () => {
       if (!selectedOffer) return;
@@ -305,10 +306,10 @@ const renderDeploymentPlanner = (
         </div>
         <div class="deployment-roster">
           ${available.map((person) => `
-            <button class="deployment-person ${selectedPeople.has(person.id) ? "selected" : ""}" data-person="${person.id}" type="button">
+            <button class="deployment-person ${selectedPeople.has(person.id) ? "selected" : ""}" data-person="${person.id}" type="button" aria-pressed="${selectedPeople.has(person.id)}">
               <span class="deployment-avatar">${person.callsign.slice(0, 1)}</span>
               <span><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role}</small><i>${person.weapon.toUpperCase()} · ${assignmentLabels[person.assignment]}</i></span>
-              <span class="deployment-status ${person.injuries.length ? "injured" : ""}"><b>${conditionLabel(person)}</b><small>${deploymentAmmoCost(offer, person)} AMMO</small></span>
+              <span class="deployment-status ${person.injuries.length ? "injured" : ""}"><b>${selectedPeople.has(person.id) ? "SELECTED · " : ""}${conditionLabel(person)}</b><small>${deploymentAmmoCost(offer, person)} AMMO</small></span>
             </button>
           `).join("")}
         </div>

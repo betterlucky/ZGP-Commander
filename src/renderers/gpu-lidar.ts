@@ -33,6 +33,7 @@ export interface GpuLidarStats {
 
 export interface GpuLidarOptions {
   benchmarkContacts?: boolean;
+  forceFallback?: boolean;
 }
 
 const vertexShaderSource = `#version 300 es
@@ -153,7 +154,7 @@ export class GpuLidarRenderer {
     this.sectorCount = this.benchmarkMode ? QUADRANTS : 1;
     this.virtualMap = { ...map, width: map.width * this.sectorCount, height: map.height * this.sectorCount };
     this.displayOffset = this.benchmarkMode ? { x: map.width, y: 0 } : { x: 0, y: 0 };
-    const gl = canvas.getContext("webgl2", {
+    const gl = options.forceFallback ? null : canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,
       depth: false,

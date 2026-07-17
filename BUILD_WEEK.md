@@ -10,6 +10,8 @@ human/agent collaboration inspectable.
 - **Project:** ZGP Commander
 - **Category:** Apps for Your Life
 - **Live showcase:** <https://betterlucky.github.io/ZGP-Commander/?demo=1>
+- **Devpost submission:** <https://devpost.com/software/zgp-commander>
+- **Demonstration video:** <https://youtu.be/0hmdHQcRuaY>
 - **Repository:** <https://github.com/betterlucky/ZGP-Commander>
 - **Primary Codex session ID:** `019f5be1-6f19-7213-b7e1-84fe4766a697`
 - **Model:** GPT-5.6 in Codex
@@ -71,6 +73,10 @@ submission documentation. The original commit timestamps remain intact.
 - Used browser-driven testing to complete the submission route as a fresh user,
   checking the intro, preselected squad, breach guidance, best-scavenger
   assignment, extraction readiness and returned-squad consequences.
+- Helped explore and compare several graphical systems, then synthesised the
+  failed attempts into Ghostlink's rule-bearing point-cloud presentation after
+  the human rejected directions that were readable but generic or distinctive
+  but unclear.
 - Produced the evidence, deployment workflow, README and video/submission plan
   from the working build rather than describing speculative features.
 
@@ -103,7 +109,9 @@ At the time this evidence was prepared, `npm run check` passed all 17 tests,
 strict TypeScript validation and the production Vite build. The guided route was
 also completed in a fresh browser: four survivors deployed, one cache was
 recovered, all four extracted, rewards entered transit and the base log recorded
-the outcome.
+the outcome. The Canvas route was also opened explicitly with
+`?demo=1&canvas=1` to verify that the guided flow remains available when WebGL2
+cannot be initialised.
 
 ## Known limitations
 

@@ -43,7 +43,9 @@ export const mountTacticalScreen = (
   handlers: TacticalScreenHandlers,
   options: TacticalScreenOptions = {},
 ): (() => void) => {
-  const benchmarkMode = new URLSearchParams(window.location.search).get("benchmark") === "1";
+  const searchParams = new URLSearchParams(window.location.search);
+  const benchmarkMode = searchParams.get("benchmark") === "1";
+  const forceCanvas = searchParams.get("canvas") === "1";
   const demoMode = options.demoMode ?? false;
   const simulation = new Simulation({
     missionTitle: deployment.offer.title,
@@ -110,9 +112,9 @@ export const mountTacticalScreen = (
           <div class="viewport-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
-          ${demoMode ? `<div class="demo-guide" id="demo-guide"><small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b></div>` : ""}
+          ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b></div>` : ""}
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
-          <div class="retask-hint" id="retask-hint">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · 1–9 FOCUS</div>
+          <div class="retask-hint" id="retask-hint" role="status" aria-live="polite">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · 1–9 FOCUS</div>
           <div class="performance-hud" id="performance-hud">
             <span><small>FPS</small><b id="perf-fps">--</b></span><span><small>STATIC PTS</small><b id="perf-static">--</b></span><span><small>DYNAMIC PTS</small><b id="perf-dynamic">--</b></span><span><small>CONTACTS</small><b id="perf-contacts">--</b></span><span><small>DRAW CALLS</small><b id="perf-draws">2</b></span>
           </div>
@@ -134,7 +136,16 @@ export const mountTacticalScreen = (
   const context = canvas.getContext("2d", { alpha: true });
   if (!context) throw new Error("Canvas 2D is unavailable");
   const lidar = new LidarRenderer();
-  const gpuLidar = new GpuLidarRenderer(glCanvas, simulation.state.map, { benchmarkContacts: benchmarkMode });
+  let gpuLidar: GpuLidarRenderer;
+  try {
+    gpuLidar = new GpuLidarRenderer(glCanvas, simulation.state.map, {
+      benchmarkContacts: benchmarkMode,
+      forceFallback: forceCanvas,
+    });
+  } catch (error) {
+    console.warn("WebGL2 Ghostlink setup failed; using the Canvas fallback.", error);
+    gpuLidar = new GpuLidarRenderer(glCanvas, simulation.state.map, { forceFallback: true });
+  }
   const camera: Camera = { zoom: 0.94, panX: 0, panY: 0 };
   let cssWidth = 1;
   let cssHeight = 1;
@@ -196,9 +207,13 @@ export const mountTacticalScreen = (
     if (demoGuide) {
       demoGuide.innerHTML = !state.breachOpen
         ? `<small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b>`
+        : activeCache
+          ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><b>Cache transfer in progress. The scavenger is exposed; the squad covers automatically.</b>`
         : recovered === 0
           ? `<small>STEP 2 OF 3</small><b>Right-click a cache. The best scavenger works while the squad covers.</b>`
-          : `<small>STEP 3 OF 3</small><b>${recovered}/${state.caches.length} secured. Extract now with partial salvage—or push deeper.</b>`;
+          : simulation.canExtract()
+            ? `<small>STEP 3 OF 3 · SQUAD READY</small><b>Click CALL EXTRACTION to bank the recovery.</b>`
+            : `<small>STEP 3 OF 3 · ${recovered}/${state.caches.length} SECURED</small><b>Right-click the marked landing zone to withdraw—or push deeper for more salvage.</b>`;
     }
     get("#timecode").textContent = formatTime(state.elapsed);
     get("#zoom-value").textContent = `${Math.round(camera.zoom * 100)}%`;
@@ -211,7 +226,10 @@ export const mountTacticalScreen = (
     const extractReady = simulation.canExtract();
     get("#extraction-heading").textContent = extractReady ? "SQUAD IN EXTRACTION" : recovered ? "WITHDRAWAL AVAILABLE" : "EXTRACTION MARKED";
     get("#extraction-copy").textContent = recovered ? (extractReady ? "Standing survivors ready for pickup" : `Return to landing with ${recovered} recovered cache${recovered === 1 ? "" : "s"}`) : "Recover at least one cache before withdrawing";
-    get<HTMLButtonElement>("#extract-button").classList.toggle("ready", extractReady);
+    const extractButton = get<HTMLButtonElement>("#extract-button");
+    extractButton.textContent = extractReady ? "CALL EXTRACTION" : recovered ? "RETURN SQUAD TO LANDING" : "RECOVER A CACHE TO EXTRACT";
+    extractButton.disabled = !extractReady;
+    extractButton.classList.toggle("ready", extractReady);
     if (gpuLidar.available) {
       get("#perf-fps").textContent = Math.round(gpuLidar.stats.fps).toString();
       get("#perf-static").textContent = `${Math.round(gpuLidar.stats.staticPoints / 1000)}K`;

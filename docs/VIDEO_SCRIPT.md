@@ -1,6 +1,6 @@
 # Build Week video script and shot list
 
-Target runtime: **2:42–2:50**. Record the deployed `?demo=1` route at 1280×720 or
+Final runtime: **2:52**. Record the deployed `?demo=1` route at 1280×720 or
 1920×1080 with readable cursor movement, spoken audio and notifications hidden.
 
 | Time | Picture | Voiceover |
@@ -13,8 +13,24 @@ Target runtime: **2:42–2:50**. Record the deployed `?demo=1` route at 1280×72
 | 1:37–1:57 | First cache completes; point out two remaining; move squad toward landing zone | “Now the real decision: secure more salvage under increasing pressure, or bank a partial recovery and protect people I have learned to value. This time, I leave.” |
 | 1:57–2:14 | Call extraction; operation result | “The outcome is explicit: four returned, ammunition spent, contacts encountered and salvage recovered.” |
 | 2:14–2:28 | Return to base; show transit resources, roster and command log | “Back at base, the mission persists. Resources are in transit, deployed survivors are unavailable for the day, and the command log records what happened.” |
-| 2:28–2:44 | Cut to repository README, architecture diagram and passing `npm run check` | “I built this playable TypeScript and WebGL2 slice with Codex using GPT-5.6. Codex implemented the campaign, simulation, renderer and tests; I set the product constraints, compared prototypes, rejected the thermal direction and chose what to cut.” |
-| 2:44–2:50 | Return to intro or title card with URLs | “Command the link. Live with who returns. ZGP Commander is playable now.” |
+| 2:28–2:45.5 | Cut to repository, architecture diagram and passing `npm run check` | “I built this playable TypeScript and WebGL2 slice with Codex using GPT-5.6. Codex implemented the campaign, simulation, renderer and tests; I set the product constraints, compared prototypes, rejected the thermal direction and chose what to cut.” |
+| 2:45.5–2:52 | Title card with URLs and `Voice generated with ElevenLabs — 11.ai` | “Command the link. Live with who returns. ZGP Commander is playable now.” |
+
+## Voiceover production
+
+- Generated clips and measured durations are in
+  [`docs/video/voiceover`](video/voiceover/README.md).
+- Generate the narration in short, scene-aligned segments with ElevenLabs so a
+  timing or pronunciation correction does not require regenerating the full
+  track.
+- Keep the final narration near 230 words and leave brief gaps for interface
+  sounds and visual transitions.
+- Credit the free-plan voice generation on the end card as
+  `Voice generated with ElevenLabs — 11.ai`.
+- Suggested YouTube title:
+  `ZGP Commander — OpenAI Build Week 2026 | Voice generated with 11.ai`.
+- Repeat `Voice generated with ElevenLabs — https://11.ai` in the YouTube
+  description.
 
 ## Capture checklist
 
@@ -25,4 +41,6 @@ Target runtime: **2:42–2:50**. Record the deployed `?demo=1` route at 1280×72
 - Avoid dead time: the first cache can be shortened in the edit without hiding
   the decision or result.
 - Show the public URL and repository in the final frame or YouTube description.
+- Confirm the ElevenLabs credit is legible on the final frame and present in
+  both the YouTube title and description.
 - Watch the finished upload logged out before attaching it to Devpost.

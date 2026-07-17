@@ -47,24 +47,41 @@ commands and publishes plain presentation snapshots; renderers consume those
 snapshots without owning gameplay rules. Seeded fixtures make the showcase and
 tests reproducible, while a versioned browser save supports the full campaign.
 
-Codex with GPT-5.6 was the implementation partner throughout the eligible build.
-It translated product constraints into architecture documents, built the
-campaign and tactical systems, implemented the WebGL2 presentation, added tests,
-debugged the interactive flow and used browser-driven checks to complete the
-judge route. The human supplied the product thesis and acceptance decisions:
-choosing Ghostlink over a thermal variant, insisting on persistent people and
-declared risk, rejecting hidden squad-size scaling, and cutting broad feature
-expansion in favour of a coherent vertical slice.
+Codex with GPT-5.6 was both implementation partner and visual-design
+collaborator throughout the eligible build. It translated product constraints
+into architecture documents, built the campaign and tactical systems,
+implemented the WebGL2 presentation, added tests, debugged the interactive flow
+and used browser-driven checks to complete the judge route. The human supplied
+the product thesis and acceptance decisions: insisting on persistent people and
+declared risk, rejecting hidden squad-size scaling, comparing and rejecting
+several graphical prototypes—including a thermal direction—and cutting broad
+feature expansion in favour of a coherent vertical slice.
 
 ## Challenges and decisions
 
-The largest design challenge was making the visual identity serve the rules
-rather than behave as a filter. Ghostlink therefore has an information contract:
-friendly telemetry is reliable; environment and contact data are incomplete.
-The largest production challenge was connecting a tactical mission to meaningful
-campaign consequences without building a backend or a sprawling content
-pipeline. A strict separation between campaign state, simulation and rendering
-kept that tractable and testable.
+The point-cloud presentation was not our first answer. Several earlier
+graphical approaches were technically viable but failed to make the game
+readable or distinctive. Working iteratively with Codex and GPT-5.6 let us turn
+those failed prototypes into design evidence and arrive at Ghostlink: a new way
+to visualise the game in which an incomplete remote sensor reconstruction
+communicates the rules rather than merely applying a visual filter. Friendly
+telemetry is reliable; environment and hostile-contact data are deliberately
+uncertain.
+
+The largest production challenge was connecting a tactical mission to
+meaningful campaign consequences without building a backend or a sprawling
+content pipeline. A strict separation between campaign state, simulation and
+rendering kept that tractable and testable.
+
+## What we learned
+
+Rapid implementation is only useful when paired with deliberate product cuts.
+Codex did more than accelerate implementation: after several visual attempts
+failed, it helped explore, compare and synthesise a graphical system that
+neither of us had started with. Human judgement decided which prototypes failed
+and which direction served the game. The strongest outcome came from treating
+the point cloud as an information contract and persistent people as the source
+of stakes.
 
 ## What comes next
 
@@ -75,9 +92,19 @@ pipeline are intentionally outside this slice.
 
 ## Judge links
 
+- Submission: <https://devpost.com/software/zgp-commander>
 - Demo: <https://betterlucky.github.io/ZGP-Commander/?demo=1>
 - Full campaign: <https://betterlucky.github.io/ZGP-Commander/>
 - Repository: <https://github.com/betterlucky/ZGP-Commander>
 - Evidence: <https://github.com/betterlucky/ZGP-Commander/blob/main/BUILD_WEEK.md>
 - Codex session ID: `019f5be1-6f19-7213-b7e1-84fe4766a697`
-- Video: add public YouTube URL after upload
+- Video: <https://youtu.be/0hmdHQcRuaY>
+
+## Video publishing
+
+- Final master: `zgp-commander-build-week-2026.mp4` (1920×1080, 2:52, H.264/AAC)
+- YouTube title:
+  `ZGP Commander — OpenAI Build Week 2026 | Voice generated with 11.ai`
+- YouTube description credit:
+  `Voice generated with ElevenLabs — https://11.ai`
+- Include the same credit legibly on the final title card.

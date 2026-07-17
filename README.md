@@ -5,6 +5,8 @@ what you can, decide when to leave, and live with who returns.**
 
 [Play the 3–4 minute Build Week demo](https://betterlucky.github.io/ZGP-Commander/?demo=1)
 · [Open the full campaign](https://betterlucky.github.io/ZGP-Commander/)
+· [Watch the 2:52 demo](https://youtu.be/0hmdHQcRuaY)
+· [View the submission](https://devpost.com/software/zgp-commander)
 · [Build Week evidence](BUILD_WEEK.md)
 
 [![CI](https://github.com/betterlucky/ZGP-Commander/actions/workflows/ci.yml/badge.svg)](https://github.com/betterlucky/ZGP-Commander/actions/workflows/ci.yml)
@@ -75,6 +77,7 @@ npm run dev
 ```
 
 Use the local URL printed by Vite. Add `?demo=1` for the guided showcase.
+Add `?demo=1&canvas=1` to exercise the Canvas fallback explicitly.
 
 ```bash
 npm run check

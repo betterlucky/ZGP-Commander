@@ -25,6 +25,7 @@
 .warm-button { border: 1px solid rgba(var(--base-warm-rgb),.55); background: rgba(var(--base-warm-rgb),.12); color: var(--base-warm); font-weight: 800; font-size: 9px; letter-spacing: .1em; cursor: pointer; }
 .warm-button:hover:not(:disabled) { background: rgba(var(--base-warm-rgb),.22); box-shadow: inset 0 -2px var(--base-warm); }
 .warm-button:disabled, .quiet-button:disabled { opacity: .4; cursor: not-allowed; }
+.base-shell button:focus-visible, .base-shell a:focus-visible, .base-shell select:focus-visible { outline: 2px solid var(--base-warm); outline-offset: 2px; }
 .base-topbar > .warm-button { border: 0; }
 
 .base-workarea { min-height: 0; display: grid; grid-template-columns: 280px minmax(520px, 1fr) 330px; }
@@ -147,6 +148,7 @@
 .deployment-status b { color: var(--base-good); font-size: 9px; }
 .deployment-status small { color: var(--base-warm); font-size: 8px; }
 .deployment-status.injured b { color: var(--base-danger); }
+.deployment-person.selected .deployment-status b { color: #f2c46f; }
 .deployment-dialog > footer { display: grid; grid-template-columns: 1.7fr .8fr 220px; align-items: stretch; border-top: 1px solid var(--base-line); }
 .deployment-dialog > footer div { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 16px; border-right: 1px solid var(--base-line); }
 .deployment-dialog > footer b { color: #bdb49f; font-size: 8px; }
