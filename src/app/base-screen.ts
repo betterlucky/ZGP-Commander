@@ -8,6 +8,12 @@ interface BaseScreenHandlers {
   onReset(): void;
 }
 
+interface BaseScreenOptions {
+  demoMode?: boolean;
+  showDemoIntro?: boolean;
+  onDemoStarted?(): void;
+}
+
 const assignmentLabels: Record<BaseAssignment, string> = {
   general: "General duty",
   workshop: "Workshop",
@@ -52,10 +58,14 @@ export const mountBaseScreen = (
   campaign: Campaign,
   store: CampaignStore,
   handlers: BaseScreenHandlers,
+  options: BaseScreenOptions = {},
 ): void => {
   let selectedOfferId: string | null = null;
   const selectedPeople = new Set<string>();
-  let notice = "Select an operation when you are ready. Base assignments remain provisional until the day ends.";
+  let demoIntroVisible = options.showDemoIntro ?? false;
+  let notice = options.demoMode && campaign.state.operations.some((operation) => operation.status === "resolved")
+    ? "Demo operation complete. Review the returned squad, field resources in transit and command log—or restart the showcase."
+    : "Select an operation when you are ready. Base assignments remain provisional until the day ends.";
 
   const render = (): void => {
     const state = campaign.state;
@@ -72,7 +82,7 @@ export const mountBaseScreen = (
     root.innerHTML = `
       <main class="base-shell">
         <header class="base-topbar">
-          <div class="base-brand"><span>HOLDFAST</span><small>OUTPOST COMMAND</small></div>
+          <div class="base-brand"><span>HOLDFAST</span><small>${options.demoMode ? "BUILD WEEK DEMO" : "OUTPOST COMMAND"}</small></div>
           <div class="cycle-readout"><small>OPERATIONAL CYCLE</small><strong>DAY ${state.day}</strong></div>
           <div class="resource-strip">
             <span><small>AMMUNITION</small><b>${state.resources.ammunition}${state.transit.ammunition ? `<i>+${state.transit.ammunition} TRANSIT</i>` : ""}</b></span>
@@ -126,6 +136,7 @@ export const mountBaseScreen = (
               <p>${escapeHtml(notice)}</p>
               <div>
                 <button class="quiet-button" id="upgrade-support" type="button" ${state.resources.materials < campaign.getSupportUpgradeCost() ? "disabled" : ""}>EXPAND SUPPORT +4 · ${campaign.getSupportUpgradeCost()} MAT</button>
+                ${options.demoMode ? `<button class="quiet-button" id="restart-demo" type="button">RESTART DEMO</button>` : ""}
                 <button class="text-button" id="reset-campaign" type="button">RESET CAMPAIGN</button>
               </div>
             </div>
@@ -159,6 +170,7 @@ export const mountBaseScreen = (
         </footer>
 
         ${selectedOffer ? renderDeploymentPlanner(selectedOffer, available, selectedPeople, state.resources.ammunition) : ""}
+        ${demoIntroVisible ? renderDemoIntro() : ""}
       </main>
     `;
 
@@ -198,6 +210,16 @@ export const mountBaseScreen = (
       selectedPeople.clear();
       render();
     });
+    root.querySelector<HTMLButtonElement>("#start-demo")?.addEventListener("click", () => {
+      const offer = campaign.availableOffers().find((candidate) => candidate.title === "Clinic Supply Run") ?? campaign.availableOffers()[0];
+      if (!offer) return;
+      demoIntroVisible = false;
+      options.onDemoStarted?.();
+      selectedOfferId = offer.id;
+      selectedPeople.clear();
+      for (const person of campaign.availablePeople().slice(0, offer.protocolSquad)) selectedPeople.add(person.id);
+      render();
+    });
     root.querySelector<HTMLButtonElement>("#launch-operation")?.addEventListener("click", () => {
       if (!selectedOffer) return;
       try {
@@ -234,10 +256,31 @@ export const mountBaseScreen = (
     root.querySelector<HTMLButtonElement>("#reset-campaign")?.addEventListener("click", () => {
       if (window.confirm("Reset the local campaign and discard its history?")) handlers.onReset();
     });
+    root.querySelector<HTMLButtonElement>("#restart-demo")?.addEventListener("click", handlers.onReset);
   };
 
   render();
 };
+
+const renderDemoIntro = (): string => `
+  <section class="demo-intro" aria-labelledby="demo-title">
+    <div class="demo-intro-card">
+      <small>OPENAI BUILD WEEK · PLAYABLE SHOWCASE</small>
+      <h1 id="demo-title">COMMAND THE LINK.<br><span>LIVE WITH WHO RETURNS.</span></h1>
+      <p>ZGP Commander is an order-based squad tactics game seen through an incomplete remote sensor reconstruction. Combat is automatic; your decisions are who to risk, where to hold, how much to salvage and when to leave.</p>
+      <ol>
+        <li><b>Deploy</b><span>A balanced four-person squad is ready.</span></li>
+        <li><b>Recover</b><span>Breach the site and secure at least one cache.</span></li>
+        <li><b>Decide</b><span>Bank partial salvage or push deeper as contact pressure rises.</span></li>
+      </ol>
+      <div class="demo-intro-actions">
+        <button class="warm-button" id="start-demo" type="button">BEGIN 3–4 MINUTE DEMO</button>
+        <a href="./">OPEN FULL CAMPAIGN</a>
+      </div>
+      <span class="demo-note">Desktop · keyboard and mouse · no account required</span>
+    </div>
+  </section>
+`;
 
 const renderDeploymentPlanner = (
   offer: MissionOffer,

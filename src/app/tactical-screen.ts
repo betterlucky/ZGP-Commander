@@ -12,6 +12,10 @@ interface TacticalScreenHandlers {
   onReturn(): void;
 }
 
+interface TacticalScreenOptions {
+  demoMode?: boolean;
+}
+
 const roleIcon: Record<Unit["role"], string> = {
   MEDIC: "+",
   SCAVENGER: "▣",
@@ -37,14 +41,16 @@ export const mountTacticalScreen = (
   root: HTMLElement,
   deployment: Deployment,
   handlers: TacticalScreenHandlers,
+  options: TacticalScreenOptions = {},
 ): (() => void) => {
   const benchmarkMode = new URLSearchParams(window.location.search).get("benchmark") === "1";
+  const demoMode = options.demoMode ?? false;
   const simulation = new Simulation({
     missionTitle: deployment.offer.title,
     objectiveLabel: deployment.offer.objective,
     riskLabel: deployment.offer.risk,
-    threat: deployment.offer.threat,
-    cacheCount: deployment.offer.kind === "rescue" ? 1 : 6,
+    threat: demoMode ? Math.min(deployment.offer.threat, 0.42) : deployment.offer.threat,
+    cacheCount: deployment.offer.kind === "rescue" ? 1 : demoMode ? 3 : 6,
     units: deployment.people.map((person) => ({
       personId: person.id,
       name: person.callsign,
@@ -55,6 +61,7 @@ export const mountTacticalScreen = (
       scavengeSkill: Math.min(99, baseScavengeSkill[person.role] + Math.min(14, person.career.missions * 2)),
     })),
   });
+  if (demoMode) simulation.selectAll();
   const lastAmmo = new Map(simulation.state.units.map((unit) => [unit.id, unit.ammo]));
   let lastKillSequence = 0;
   let lastHitSequence = 0;
@@ -64,7 +71,7 @@ export const mountTacticalScreen = (
   root.innerHTML = `
     <main class="shell tactical-shell">
       <header class="topbar">
-        <div class="brand-block"><span class="brand">HOLDFAST</span><span class="divider">//</span><span class="system-name">GHOSTLINK</span></div>
+        <div class="brand-block"><span class="brand">HOLDFAST</span><span class="divider">//</span><span class="system-name">${demoMode ? "BUILD WEEK DEMO" : "GHOSTLINK"}</span></div>
         <div class="mission-block"><span class="eyebrow">ACTIVE ENGAGEMENT · ${deployment.offer.risk}</span><strong>${escapeHtml(deployment.offer.title.toUpperCase())}</strong></div>
         <div class="threat-block"><span>CONTACT PRESSURE</span><div class="threat-track"><i id="threat-fill"></i></div><b id="contact-count">--</b></div>
         <div class="status-block"><span class="signal-dot"></span><span>LINK <b id="signal-value">92%</b></span><button class="pause-button" id="pause-button" type="button">Ⅱ PAUSE</button></div>
@@ -103,6 +110,7 @@ export const mountTacticalScreen = (
           <div class="viewport-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
+          ${demoMode ? `<div class="demo-guide" id="demo-guide"><small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b></div>` : ""}
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
           <div class="retask-hint" id="retask-hint">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · 1–9 FOCUS</div>
           <div class="performance-hud" id="performance-hud">
@@ -184,6 +192,14 @@ export const mountTacticalScreen = (
     get("#cache-fraction").textContent = `${recovered} / ${state.caches.length}`;
     get("#cache-copy").textContent = recovered === state.caches.length ? "All known caches recovered" : activeCache ? "Assigned scavenger transferring supplies; squad covering" : recovered ? "Extract now with partial salvage or continue" : state.breachOpen ? "Right-click a cache to assign the best scavenger" : "Breach, then recover any cache";
     get("#cache-progress").style.width = `${(activeCache?.progress ?? (recovered === state.caches.length ? 1 : 0)) * 100}%`;
+    const demoGuide = root.querySelector<HTMLElement>("#demo-guide");
+    if (demoGuide) {
+      demoGuide.innerHTML = !state.breachOpen
+        ? `<small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b>`
+        : recovered === 0
+          ? `<small>STEP 2 OF 3</small><b>Right-click a cache. The best scavenger works while the squad covers.</b>`
+          : `<small>STEP 3 OF 3</small><b>${recovered}/${state.caches.length} secured. Extract now with partial salvage—or push deeper.</b>`;
+    }
     get("#timecode").textContent = formatTime(state.elapsed);
     get("#zoom-value").textContent = `${Math.round(camera.zoom * 100)}%`;
     const selected = state.units.filter((unit) => unit.selected).length;

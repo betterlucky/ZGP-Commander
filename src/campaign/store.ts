@@ -1,12 +1,14 @@
 import { Campaign, createInitialCampaignState } from "./campaign";
 import type { CampaignState } from "./types";
 
-const STORAGE_KEY = "zgp-commander-campaign-v1";
+const DEFAULT_STORAGE_KEY = "zgp-commander-campaign-v1";
 
 export class CampaignStore {
+  constructor(private readonly storageKey = DEFAULT_STORAGE_KEY) {}
+
   public load(): Campaign {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(this.storageKey);
       if (!raw) return new Campaign();
       const state = JSON.parse(raw) as CampaignState;
       if (state.schemaVersion !== 1) throw new Error("Unsupported campaign schema.");
@@ -18,12 +20,11 @@ export class CampaignStore {
   }
 
   public save(campaign: Campaign): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(campaign.snapshot()));
+    localStorage.setItem(this.storageKey, JSON.stringify(campaign.snapshot()));
   }
 
   public reset(): Campaign {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(this.storageKey);
     return new Campaign(createInitialCampaignState());
   }
 }
-

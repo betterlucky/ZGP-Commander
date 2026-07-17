@@ -152,6 +152,22 @@
 .deployment-dialog > footer b { color: #bdb49f; font-size: 8px; }
 .deployment-dialog > footer b.insufficient { color: var(--base-danger); }
 
+.demo-intro { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 32px; background: radial-gradient(circle at 50% 38%, rgba(84,92,66,.28), rgba(2,4,3,.91) 62%); backdrop-filter: blur(8px); }
+.demo-intro-card { width: min(760px, 92vw); padding: 42px 48px 36px; border: 1px solid rgba(var(--base-warm-rgb),.58); background: linear-gradient(155deg, rgba(25,28,21,.98), rgba(8,10,8,.99)); box-shadow: 0 30px 120px #000, inset 0 1px rgba(255,255,255,.035); }
+.demo-intro-card > small { color: var(--base-warm); font-size: 10px; letter-spacing: .18em; }
+.demo-intro-card h1 { margin: 18px 0 16px; color: #efe6cf; font: 800 36px/1.12 "Arial Narrow", Arial, sans-serif; letter-spacing: .09em; }
+.demo-intro-card h1 span { color: var(--base-warm); }
+.demo-intro-card > p { max-width: 680px; margin: 0; color: #aaa493; font-size: 13px; line-height: 1.65; }
+.demo-intro-card ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 28px 0; padding: 0; list-style: none; }
+.demo-intro-card li { min-height: 90px; display: flex; flex-direction: column; gap: 9px; padding: 16px; border: 1px solid var(--base-line); background: rgba(var(--base-warm-rgb),.035); }
+.demo-intro-card li b { color: #ddd3bb; font-size: 12px; letter-spacing: .1em; }
+.demo-intro-card li span { color: #8f897a; font-size: 11px; line-height: 1.45; }
+.demo-intro-actions { display: flex; align-items: center; gap: 22px; }
+.demo-intro-actions .warm-button { min-height: 48px; padding: 0 24px; font-size: 11px; }
+.demo-intro-actions a { color: #9c9585; font-size: 10px; text-decoration: none; border-bottom: 1px solid #5f5a50; }
+.demo-intro-actions a:hover { color: var(--base-warm); border-color: var(--base-warm); }
+.demo-note { display: block; margin-top: 20px; color: #686459; font-size: 9px; letter-spacing: .08em; }
+
 @media (max-width: 1250px) {
   .base-workarea { grid-template-columns: 250px minmax(500px,1fr) 290px; }
   .base-map { gap: 20px; padding: 38px 28px; }
