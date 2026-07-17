@@ -7,6 +7,9 @@ what you can, decide when to leave, and live with who returns.**
 · [Open the full campaign](https://betterlucky.github.io/ZGP-Commander/)
 · [Build Week evidence](BUILD_WEEK.md)
 
+[![CI](https://github.com/betterlucky/ZGP-Commander/actions/workflows/ci.yml/badge.svg)](https://github.com/betterlucky/ZGP-Commander/actions/workflows/ci.yml)
+[![GitHub Pages](https://github.com/betterlucky/ZGP-Commander/actions/workflows/pages.yml/badge.svg)](https://github.com/betterlucky/ZGP-Commander/actions/workflows/pages.yml)
+
 ![The Build Week demo introduction](docs/screenshots/demo-intro.jpg)
 
 ZGP Commander is an order-based squad tactics and campaign game. You prepare a

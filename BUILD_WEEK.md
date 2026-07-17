@@ -34,8 +34,9 @@ repository history begins after the opening time:
 | `0c58801` | 13 Jul, 9:42 p.m. | Playable campaign vertical slice with roster, deployment and consequences |
 | `45862e0` | 13 Jul, 10:29 p.m. | Tactical controls and operation-map overhaul |
 | `c0f4c62` | 14 Jul, 3:23 p.m. | Multi-cache salvage missions and expanded tactical flow |
+| `5e7935f` | 17 Jul, 9:42 p.m. | Isolated judge route, save-isolation tests, screenshots, deployment and submission package |
 
-The Build Week submission polish adds the isolated `?demo=1` route, guided
+The Build Week submission polish added the isolated `?demo=1` route, guided
 three-step operation, judge-friendly reset, screenshots, deployment and
 submission documentation. The original commit timestamps remain intact.
 
