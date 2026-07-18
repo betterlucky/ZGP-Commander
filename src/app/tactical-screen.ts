@@ -149,6 +149,7 @@ export const mountTacticalScreen = (
   const camera: Camera = { zoom: 0.94, panX: 0, panY: 0 };
   let cssWidth = 1;
   let cssHeight = 1;
+  let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
   let lastFrame = performance.now();
   let lastRender = 0;
   let lastUiUpdate = 0;
@@ -157,6 +158,9 @@ export const mountTacticalScreen = (
   const resumeAudio = (): void => tacticalAudio.resume();
   let selectionDrag: { start: Vec2; current: Vec2; additive: boolean } | null = null;
   let panDrag: { start: Vec2; panX: number; panY: number } | null = null;
+  let lastUnitCardsMarkup = "";
+  let lastEventLogMarkup = "";
+  let lastDemoGuideMarkup = "";
 
   const get = <T extends HTMLElement>(selector: string): T => {
     const element = root.querySelector<T>(selector);
@@ -166,19 +170,19 @@ export const mountTacticalScreen = (
 
   const resizeCanvas = (): void => {
     const rect = canvas.getBoundingClientRect();
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
     cssWidth = Math.max(1, rect.width);
     cssHeight = Math.max(1, rect.height);
-    const pixelWidth = Math.round(cssWidth * ratio);
-    const pixelHeight = Math.round(cssHeight * ratio);
+    const pixelWidth = Math.round(cssWidth * pixelRatio);
+    const pixelHeight = Math.round(cssHeight * pixelRatio);
     if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) { canvas.width = pixelWidth; canvas.height = pixelHeight; }
     if (glCanvas.width !== pixelWidth || glCanvas.height !== pixelHeight) { glCanvas.width = pixelWidth; glCanvas.height = pixelHeight; }
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   };
 
+  const unitCards = get<HTMLDivElement>("#unit-cards");
   const renderUnitCards = (): void => {
-    const container = get<HTMLDivElement>("#unit-cards");
-    container.innerHTML = simulation.state.units.map((unit) => {
+    const markup = simulation.state.units.map((unit) => {
       const order = unit.state === "collecting" ? "SCAVENGING — DEFENCE REDUCED" : unit.state === "moving" ? "MOVING IN FORMATION — WEAPONS LIMITED" : unit.state === "reloading" ? `RELOADING · ${Math.max(0, unit.reloadTimer).toFixed(1)}S` : unit.state === "down" ? "INCAPACITATED · LINK ACTIVE" : "HOLDING · ENGAGING";
       return `
         <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
@@ -187,8 +191,18 @@ export const mountTacticalScreen = (
         </button>
       `;
     }).join("");
-    container.querySelectorAll<HTMLButtonElement>("[data-unit]").forEach((button) => button.addEventListener("click", (event) => simulation.selectUnit(Number(button.dataset.unit), event.shiftKey)));
+    if (markup === lastUnitCardsMarkup) return;
+    lastUnitCardsMarkup = markup;
+    unitCards.innerHTML = markup;
   };
+
+  const unitCardClickHandler = (event: MouseEvent): void => {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest<HTMLButtonElement>("[data-unit]");
+    if (!button || !unitCards.contains(button)) return;
+    simulation.selectUnit(Number(button.dataset.unit), event.shiftKey);
+  };
+  unitCards.addEventListener("click", unitCardClickHandler);
 
   const updateUI = (): void => {
     const state = simulation.state;
@@ -205,7 +219,7 @@ export const mountTacticalScreen = (
     get("#cache-progress").style.width = `${(activeCache?.progress ?? (recovered === state.caches.length ? 1 : 0)) * 100}%`;
     const demoGuide = root.querySelector<HTMLElement>("#demo-guide");
     if (demoGuide) {
-      demoGuide.innerHTML = !state.breachOpen
+      const markup = !state.breachOpen
         ? `<small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b>`
         : activeCache
           ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><b>Cache transfer in progress. The scavenger is exposed; the squad covers automatically.</b>`
@@ -214,6 +228,10 @@ export const mountTacticalScreen = (
           : simulation.canExtract()
             ? `<small>STEP 3 OF 3 · SQUAD READY</small><b>Click CALL EXTRACTION to bank the recovery.</b>`
             : `<small>STEP 3 OF 3 · ${recovered}/${state.caches.length} SECURED</small><b>Right-click the marked landing zone to withdraw—or push deeper for more salvage.</b>`;
+      if (lastDemoGuideMarkup !== markup) {
+        lastDemoGuideMarkup = markup;
+        demoGuide.innerHTML = markup;
+      }
     }
     get("#timecode").textContent = formatTime(state.elapsed);
     get("#zoom-value").textContent = `${Math.round(camera.zoom * 100)}%`;
@@ -237,7 +255,11 @@ export const mountTacticalScreen = (
       get("#perf-contacts").textContent = gpuLidar.stats.contacts.toString();
       get("#perf-draws").textContent = gpuLidar.stats.drawCalls.toString();
     } else get("#performance-hud").classList.add("fallback");
-    get<HTMLDivElement>("#event-log").innerHTML = state.events.slice(0, 5).map((event) => `<div class="event ${event.tone}"><time>${formatTime(event.time)}</time><span><b>${escapeHtml(event.who)}</b>${escapeHtml(event.message)}</span></div>`).join("");
+    const eventLogMarkup = state.events.slice(0, 5).map((event) => `<div class="event ${event.tone}"><time>${formatTime(event.time)}</time><span><b>${escapeHtml(event.who)}</b>${escapeHtml(event.message)}</span></div>`).join("");
+    if (eventLogMarkup !== lastEventLogMarkup) {
+      lastEventLogMarkup = eventLogMarkup;
+      get<HTMLDivElement>("#event-log").innerHTML = eventLogMarkup;
+    }
     renderUnitCards();
   };
 
@@ -277,13 +299,12 @@ export const mountTacticalScreen = (
     const dt = Math.max(0, Math.min((now - lastFrame) / 1000, .06));
     lastFrame = now;
     lastRender = now;
-    resizeCanvas();
+    if (pixelRatio !== Math.min(window.devicePixelRatio || 1, 2)) resizeCanvas();
     if (benchmarkMode && gpuLidar.available) simulation.updateBenchmark(dt);
     else simulation.update(dt);
     syncAudio();
     if (gpuLidar.available) {
-      const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      gpuLidar.render(cssWidth, cssHeight, ratio, simulation.state, camera);
+      gpuLidar.render(cssWidth, cssHeight, pixelRatio, simulation.state, camera);
       gpuLidar.renderOverlay(context, cssWidth, cssHeight, simulation.state);
     } else lidar.render(context, cssWidth, cssHeight, simulation.state, camera);
     if (now - lastUiUpdate > 250) { updateUI(); lastUiUpdate = now; }
@@ -489,6 +510,7 @@ export const mountTacticalScreen = (
 
   return () => {
     cancelAnimationFrame(animationFrame);
+    gpuLidar.dispose();
     resizeObserver.disconnect();
     window.removeEventListener("keydown", keyHandler);
     root.removeEventListener("pointerdown", resumeAudio);
@@ -498,5 +520,6 @@ export const mountTacticalScreen = (
     canvas.removeEventListener("pointercancel", pointerCancelHandler);
     canvas.removeEventListener("contextmenu", contextMenuHandler);
     canvas.removeEventListener("wheel", wheelHandler);
+    unitCards.removeEventListener("click", unitCardClickHandler);
   };
 };
