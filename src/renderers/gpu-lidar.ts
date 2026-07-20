@@ -651,15 +651,14 @@ export class GpuLidarRenderer {
     const selected = state.units.filter((unit) => unit.selected && unit.state !== "down");
     if (!selected.length) return;
     ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineWidth = 0.8;
-    ctx.setLineDash([4, 5]);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.lineWidth = 1.4;
     for (const unit of selected) {
       const center = transform.toScreen(this.offsetPoint(unit.pos), 0.01);
       const radiusX = unit.attackRange * transform.tileW * Math.SQRT1_2;
       const radiusY = unit.attackRange * transform.tileH * Math.SQRT1_2;
-      ctx.fillStyle = unit.state === "reloading" ? "rgba(255,181,64,.025)" : "rgba(73,221,255,.022)";
-      ctx.strokeStyle = unit.state === "reloading" ? "rgba(255,190,77,.18)" : "rgba(81,226,255,.16)";
+      ctx.fillStyle = unit.state === "reloading" ? "rgba(255,184,72,.10)" : "rgba(75,235,142,.10)";
+      ctx.strokeStyle = unit.state === "reloading" ? "rgba(255,200,96,.62)" : "rgba(91,255,165,.58)";
       ctx.beginPath();
       ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2);
       ctx.fill();

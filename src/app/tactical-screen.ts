@@ -114,7 +114,7 @@ export const mountTacticalScreen = (
           <div class="viewport-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
-          ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b></div>` : ""}
+          ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>STEP 1 OF 3</small><span><b>Your whole squad is selected. Keep them together for now, or click a unit card to command someone independently.</b><em>Press F to breach the marked entry.</em></span></div>` : ""}
           <div class="runner-alert ${demoMode ? "with-guide" : ""}" id="runner-alert" role="alert"><small>FAST CONTACTS</small><b>RUNNER RUSH INCOMING</b><span>BRACE</span></div>
           <button class="viewport-extract-button" id="viewport-extract-button" type="button">CALL EXTRACTION · ALL STANDING SURVIVORS READY</button>
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
@@ -234,14 +234,14 @@ export const mountTacticalScreen = (
     const demoGuide = root.querySelector<HTMLElement>("#demo-guide");
     if (demoGuide) {
       const markup = !state.breachOpen
-        ? `<small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b>`
+        ? `<small>STEP 1 OF 3</small><span><b>Your whole squad is selected. Keep them together for now, or click a unit card to command someone independently.</b><em>Press F to breach the marked entry.</em></span>`
         : activeCache
-          ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><b>Cache transfer in progress. The scavenger is exposed; the squad covers automatically.</b>`
+          ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><span><b>Cache transfer in progress.</b><em>The scavenger is exposed; the rest of the selected squad covers automatically.</em></span>`
         : recovered === 0
-          ? `<small>STEP 2 OF 3</small><b>Right-click a cache. The best scavenger works while the squad covers.</b>`
+          ? `<small>STEP 2 OF 3</small><span><b>Right-click to move. Right-click a cache to start scavenging.</b><em>The best selected scavenger works while the rest of the squad covers.</em></span>`
           : simulation.canExtract()
-            ? `<small>STEP 3 OF 3 · SQUAD READY</small><b>Click CALL EXTRACTION to bank the recovery.</b>`
-            : `<small>STEP 3 OF 3 · ${recovered}/${state.caches.length} SECURED</small><b>Right-click the marked landing zone to withdraw—or push deeper for more salvage.</b>`;
+            ? `<small>STEP 3 OF 3 · SQUAD READY</small><span><b>Click CALL EXTRACTION to bank the recovery.</b><em>Anything still in transit will arrive at the outpost after the mission.</em></span>`
+            : `<small>STEP 3 OF 3 · ${recovered}/${state.caches.length} SECURED</small><span><b>Right-click the marked landing zone to withdraw—or push deeper for more salvage.</b><em>Make sure every standing survivor comes home.</em></span>`;
       if (lastDemoGuideMarkup !== markup) {
         lastDemoGuideMarkup = markup;
         demoGuide.innerHTML = markup;

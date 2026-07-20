@@ -168,7 +168,9 @@
 .deployment-dialog > header button:disabled { opacity: .25; cursor: default; }
 .deployment-demo-guide { position: absolute; z-index: 2; left: 52%; top: 50%; width: min(620px, 64%); min-height: 42px; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 12px; padding: 7px 12px; border: 1px solid rgba(var(--base-warm-rgb),.42); background: rgba(21,24,18,.97); box-shadow: 0 8px 28px rgba(0,0,0,.48), inset 3px 0 var(--base-warm); }
 .deployment-demo-guide small { flex: 0 0 auto; color: var(--base-warm) !important; font-size: 8px !important; letter-spacing: .1em; }
-.deployment-demo-guide b { color: #d8cfba; font-size: 10px; line-height: 1.35; }
+.deployment-demo-guide b { flex: 1 1 auto; color: #d8cfba; font-size: 10px; line-height: 1.35; }
+.demo-continue { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid rgba(var(--base-warm-rgb),.62); background: rgba(var(--base-warm-rgb),.12); color: #f1c672; font-size: 8px; font-weight: 800; letter-spacing: .08em; cursor: pointer; animation: demo-establish-link .8s ease-in-out infinite alternate; }
+.demo-continue:hover { background: rgba(var(--base-warm-rgb),.26); }
 .demo-auto-deploy .deployment-roster { pointer-events: none; }
 .demo-auto-deploy .deployment-person { cursor: default; }
 .demo-auto-deploy .deployment-person.demo-selected-now { animation: demo-person-selected .4s ease-out; }

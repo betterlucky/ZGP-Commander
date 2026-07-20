@@ -16,6 +16,8 @@ interface BaseScreenOptions {
 
 type DemoDeploymentStage = "idle" | "roster" | "selecting" | "linking";
 type FacilityId = "operations" | "medical" | "workshop" | "logistics" | "quarters" | "records";
+const demoRosterHoldMs = 975;
+const demoSelectionHoldMs = 1725;
 
 const facilityDetails: Record<Exclude<FacilityId, "quarters">, { code: string; title: string; summary: string; features: string[] }> = {
   operations: {
@@ -137,6 +139,7 @@ export const mountBaseScreen = (
   let demoIntroVisible = options.showDemoIntro ?? false;
   let demoDeploymentStage: DemoDeploymentStage = "idle";
   let demoSelectedPersonId: string | null = null;
+  let demoContinueReady = false;
   let demoSequenceVersion = 0;
   let openFacility: FacilityId | null = null;
   let notice = options.demoMode && campaign.state.operations.some((operation) => operation.status === "resolved")
@@ -263,6 +266,7 @@ export const mountBaseScreen = (
           state.resources.ammunition,
           demoDeploymentStage,
           demoSelectedPersonId,
+          demoContinueReady,
           active.length,
         ) : ""}
         ${demoIntroVisible ? renderDemoIntro() : ""}
@@ -271,6 +275,7 @@ export const mountBaseScreen = (
     `;
 
     bindEvents(selectedOffer);
+    if (demoDeploymentStage !== "idle") root.querySelector<HTMLElement>(".deployment-overlay")?.focus({ preventScroll: true });
   };
 
   const launchOperation = (offer: MissionOffer): void => {
@@ -285,39 +290,52 @@ export const mountBaseScreen = (
     }
   };
 
-  const runDemoDeploymentSequence = (offer: MissionOffer): void => {
-    const team = campaign.availablePeople().slice(0, offer.protocolSquad);
-    const sequenceVersion = ++demoSequenceVersion;
-    const queueStep = (delay: number, step: () => void): void => {
-      window.setTimeout(() => {
-        if (sequenceVersion !== demoSequenceVersion) return;
-        step();
-      }, delay);
-    };
-
+  const runDemoDeploymentSequence = (): void => {
+    demoSequenceVersion += 1;
     demoDeploymentStage = "roster";
     demoSelectedPersonId = null;
+    demoContinueReady = false;
     selectedPeople.clear();
     render();
-
-    let delay = 650;
-    for (const person of team) {
-      queueStep(delay, () => {
-        demoDeploymentStage = "selecting";
-        demoSelectedPersonId = person.id;
-        selectedPeople.add(person.id);
-        render();
-      });
-      delay += 1150;
-    }
-    queueStep(delay + 500, () => {
-      demoDeploymentStage = "linking";
-      demoSelectedPersonId = null;
+    const sequenceVersion = demoSequenceVersion;
+    window.setTimeout(() => {
+      if (sequenceVersion !== demoSequenceVersion || demoDeploymentStage !== "roster") return;
+      demoContinueReady = true;
       render();
-    });
+    }, demoRosterHoldMs);
+  };
+
+  const advanceDemoDeployment = (offer: MissionOffer): void => {
+    if (!demoContinueReady || demoDeploymentStage === "linking") return;
+    const team = campaign.availablePeople().slice(0, offer.protocolSquad);
+    const person = team.find((candidate) => !selectedPeople.has(candidate.id));
+    if (!person) return;
+    const sequenceVersion = demoSequenceVersion;
+    demoContinueReady = false;
+    demoDeploymentStage = "selecting";
+    demoSelectedPersonId = person.id;
+    selectedPeople.add(person.id);
+    render();
+    window.setTimeout(() => {
+      if (sequenceVersion !== demoSequenceVersion || demoDeploymentStage !== "selecting") return;
+      if (selectedPeople.size >= team.length) {
+        demoDeploymentStage = "linking";
+        demoSelectedPersonId = null;
+      } else demoContinueReady = true;
+      render();
+    }, demoSelectionHoldMs);
   };
 
   const bindEvents = (selectedOffer: MissionOffer | null): void => {
+    const continueDemo = (): void => {
+      if (selectedOffer) advanceDemoDeployment(selectedOffer);
+    };
+    root.querySelector<HTMLButtonElement>("#demo-continue")?.addEventListener("click", continueDemo);
+    root.querySelector<HTMLElement>(".deployment-overlay")?.addEventListener("keydown", (event) => {
+      if (event.code !== "Space" || !demoContinueReady || demoDeploymentStage === "linking") return;
+      event.preventDefault();
+      continueDemo();
+    });
     root.querySelectorAll<HTMLButtonElement>("[data-offer]").forEach((button) => {
       button.addEventListener("click", () => {
         selectedOfferId = button.dataset.offer ?? null;
@@ -370,7 +388,7 @@ export const mountBaseScreen = (
       demoIntroVisible = false;
       options.onDemoStarted?.();
       selectedOfferId = offer.id;
-      runDemoDeploymentSequence(offer);
+      runDemoDeploymentSequence();
     });
     root.querySelector<HTMLButtonElement>("#launch-operation")?.addEventListener("click", () => {
       if (!selectedOffer) return;
@@ -434,6 +452,7 @@ const renderDeploymentPlanner = (
   availableAmmo: number,
   demoStage: DemoDeploymentStage = "idle",
   demoSelectedPersonId: string | null = null,
+  demoContinueReady = false,
   rosterSize = available.length,
 ): string => {
   const selected = available.filter((person) => selectedPeople.has(person.id));
@@ -444,19 +463,22 @@ const renderDeploymentPlanner = (
     RANGER: "long-range cover controls the approach",
     ENGINEER: "technical skill and a carbine round out the team",
   };
+  const continuePrompt = demoContinueReady && demoStage !== "linking"
+    ? `<button class="demo-continue" id="demo-continue" type="button">CLICK OR PRESS SPACE TO CONTINUE</button>`
+    : "";
   const ammoCost = selected.reduce((total, person) => total + deploymentAmmoCost(offer, person), 0);
   const missionProtocol = offer.kind === "rescue" ? "rescue" : offer.kind;
   const difference = selected.length - offer.protocolSquad;
   const squadProtocol = `Standard protocol suggests a team of ${offer.protocolSquad} for ${missionProtocol} missions. ${difference === 0 ? "Protocol strength selected." : difference < 0 ? `${Math.abs(difference)} fewer currently selected.` : `${difference} additional currently selected.`}`;
   const demoGuide = demoStage === "roster"
-    ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>YOUR ROSTER</small><b>This is your roster. You currently have ${rosterSize} survivors, but for this mission we're taking out a team of ${offer.protocolSquad}.</b></div>`
+    ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>YOUR ROSTER</small><b>This is your roster. You currently have ${rosterSize} survivors, but for this mission we're taking out a team of ${offer.protocolSquad}.</b>${continuePrompt}</div>`
     : demoStage === "selecting"
-      ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>SELECTING TEAM · ${selected.length}/${offer.protocolSquad}</small><b>${demoFocus ? `${escapeHtml(demoFocus.callsign)}: ${demoRoleReason[demoFocus.role]}.` : "A balanced team is being assigned to the mission."}</b></div>`
+      ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>SELECTING TEAM · ${selected.length}/${offer.protocolSquad}</small><b>${demoFocus ? `${escapeHtml(demoFocus.callsign)}: ${demoRoleReason[demoFocus.role]}.` : "A balanced team is being assigned to the mission."}</b>${continuePrompt}</div>`
       : demoStage === "linking"
         ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>TEAM READY</small><b>${selected.length} survivors selected. Review the team, then click Establish Link.</b></div>`
         : "";
   return `
-    <section class="deployment-overlay">
+    <section class="deployment-overlay" tabindex="-1">
       <div class="deployment-dialog ${demoStage !== "idle" ? `demo-auto-deploy stage-${demoStage}` : ""}">
         <header><span><small>ROLLING DEPLOYMENT</small><strong>${escapeHtml(offer.title)}</strong></span>${demoGuide}<button id="close-planner" type="button" ${demoStage !== "idle" ? "disabled" : ""}>×</button></header>
         <div class="deployment-brief">
