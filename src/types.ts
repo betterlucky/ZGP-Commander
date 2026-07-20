@@ -27,7 +27,6 @@ export interface Unit {
   health: number;
   ammo: number;
   maxAmmo: number;
-  reserveAmmo: number;
   reloadTimer: number;
   stress: number;
   phase: number;
@@ -181,7 +180,7 @@ export interface TacticalOutcome {
   extractedPersonIds: string[];
   downPersonIds: string[];
   healthByPersonId: Record<string, number>;
-  ammunitionRemaining: number;
+  loadedRounds: number;
   contactsNeutralised: number;
   cachesRecovered: number;
   cacheCount: number;

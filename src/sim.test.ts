@@ -41,22 +41,20 @@ describe("Tactical squad orders", () => {
     expect(byWeapon.shotgun.reloadDuration).toBeGreaterThan(byWeapon.smg.reloadDuration);
   });
 
-  it("automatically completes an empty-magazine reload when reserve ammunition remains", () => {
+  it("automatically reloads empty magazines without exhausting tactical ammunition", () => {
     const simulation = new Simulation();
     const unit = simulation.state.units[0];
     simulation.state.contacts = [];
     simulation.state.breachOpen = true;
     simulation.state.map.breach.open = true;
-    unit.ammo = 0;
-    const reserveBefore = unit.reserveAmmo;
-
-    simulation.update(0.05);
-    expect(unit.state).toBe("reloading");
-    for (let index = 0; index < 50; index += 1) simulation.update(0.05);
-
-    expect(unit.state).toBe("holding");
-    expect(unit.ammo).toBe(unit.maxAmmo);
-    expect(unit.reserveAmmo).toBe(reserveBefore - unit.maxAmmo);
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      unit.ammo = 0;
+      simulation.update(0.05);
+      expect(unit.state).toBe("reloading");
+      for (let index = 0; index < 50; index += 1) simulation.update(0.05);
+      expect(unit.state).toBe("holding");
+      expect(unit.ammo).toBe(unit.maxAmmo);
+    }
   });
 
   it("does not begin scavenging from an ordinary move order", () => {

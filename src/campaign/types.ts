@@ -94,7 +94,7 @@ export interface MissionOutcome {
   extractedPersonIds: string[];
   downPersonIds: string[];
   healthByPersonId: Record<string, number>;
-  ammunitionRemaining: number;
+  loadedRounds: number;
   contactsNeutralised: number;
   cachesRecovered: number;
   cacheCount: number;

@@ -127,7 +127,7 @@ export const mountTacticalScreen = (
         <aside class="right-panel panel">
           <div class="section-title squad-title"><span>SQUAD TELEMETRY</span><small id="linked-count">${deployment.people.length} LINKED</small></div>
           <div id="unit-cards" class="unit-cards tactical-unit-cards"></div>
-          <section class="squad-summary"><div><span>COMPOSURE</span><b id="composure">--</b></div><div><span>AMMUNITION</span><b id="ammo-total">--</b></div><div><span>NEUTRALISED</span><b id="neutralised">0</b></div></section>
+          <section class="squad-summary"><div><span>COMPOSURE</span><b id="composure">--</b></div><div><span>AMMO LOADED</span><b id="loaded-total">--</b></div><div><span>NEUTRALISED</span><b id="neutralised">0</b></div></section>
         </aside>
       </section>
 
@@ -192,7 +192,7 @@ export const mountTacticalScreen = (
       return `
         <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "reloading" ? "reloading" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
           <span class="unit-index">${unit.id}</span><span class="unit-silhouette role-${unit.role.toLowerCase()}"><i>${roleIcon[unit.role]}</i></span>
-          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role} · ${unit.weapon.toUpperCase()}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>MAG ${unit.ammo}/${unit.maxAmmo}</span><span>RES ${unit.reserveAmmo}</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
+          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role} · ${unit.weapon.toUpperCase()}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>AMMO ${unit.ammo}/${unit.maxAmmo}</span><span class="reload-key">R RELOAD</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
           ${unit.state === "reloading" ? `<span class="reload-flag">RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S</span>` : ""}
         </button>
       `;
@@ -253,7 +253,9 @@ export const mountTacticalScreen = (
     get("#selected-count").textContent = `${selected} UNIT${selected === 1 ? "" : "S"}`;
     get("#pause-button").textContent = state.paused && state.missionStatus === "active" ? "▶ RESUME" : "Ⅱ PAUSE";
     get("#composure").textContent = `${Math.round(100 - state.units.reduce((sum, unit) => sum + unit.stress, 0) / state.units.length)}%`;
-    get("#ammo-total").textContent = state.units.reduce((sum, unit) => sum + unit.ammo + unit.reserveAmmo, 0).toString();
+    const loadedRounds = state.units.reduce((sum, unit) => sum + unit.ammo, 0);
+    const magazineCapacity = state.units.reduce((sum, unit) => sum + unit.maxAmmo, 0);
+    get("#loaded-total").textContent = `${loadedRounds} / ${magazineCapacity}`;
     get("#neutralised").textContent = state.contactsNeutralised.toString();
     const runnerAlert = get("#runner-alert");
     runnerAlert.classList.toggle("active", state.runnerRushStatus !== "idle");
@@ -304,7 +306,7 @@ export const mountTacticalScreen = (
     const result = document.createElement("section");
     result.className = `mission-result ${outcome.success ? "success" : "failure"}`;
     result.innerHTML = `
-      <div><small>${resultEyebrow}</small><h1>${resultHeading}</h1><p>${resultCopy}</p><section><span><small>RETURNED</small><b>${outcome.extractedPersonIds.length}</b></span><span><small>CACHES</small><b>${outcome.cachesRecovered}/${outcome.cacheCount}</b></span><span><small>NEUTRALISED</small><b>${outcome.contactsNeutralised}</b></span><span><small>AMMO LEFT</small><b>${outcome.ammunitionRemaining}</b></span></section><div class="mission-result-actions"><button class="pause-button" id="return-to-base" type="button">${showcaseComplete ? "REVIEW OUTPOST CONSEQUENCES" : "RETURN TO OUTPOST COMMAND"}</button>${showcaseComplete ? `<a href="./">OPEN FULL CAMPAIGN</a>` : ""}</div></div>
+      <div><small>${resultEyebrow}</small><h1>${resultHeading}</h1><p>${resultCopy}</p><section><span><small>RETURNED</small><b>${outcome.extractedPersonIds.length}</b></span><span><small>CACHES</small><b>${outcome.cachesRecovered}/${outcome.cacheCount}</b></span><span><small>NEUTRALISED</small><b>${outcome.contactsNeutralised}</b></span><span><small>AMMO LOADED</small><b>${outcome.loadedRounds}</b></span></section><div class="mission-result-actions"><button class="pause-button" id="return-to-base" type="button">${showcaseComplete ? "REVIEW OUTPOST CONSEQUENCES" : "RETURN TO OUTPOST COMMAND"}</button>${showcaseComplete ? `<a href="./">OPEN FULL CAMPAIGN</a>` : ""}</div></div>
     `;
     root.append(result);
     result.querySelector<HTMLButtonElement>("#return-to-base")?.addEventListener("click", handlers.onReturn);

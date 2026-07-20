@@ -163,6 +163,7 @@ button { font: inherit; color: inherit; }
 .stat-line { height: 3px; background: rgba(140,170,175,.11); }
 .stat-line i { display: block; height: 100%; background: var(--good); }
 .unit-meta { display: grid; grid-template-columns: repeat(4,auto); justify-content: space-between; gap: 4px; color: #81979d; font-size: 7px; }
+.unit-meta .reload-key { color: var(--accent); }
 .unit-order { align-self: end; color: #698188; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .unit-card.selected .unit-order { color: var(--accent); }
 .squad-summary { border-top: 1px solid var(--line); padding: 9px 4px; display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; }

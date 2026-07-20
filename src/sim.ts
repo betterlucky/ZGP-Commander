@@ -18,7 +18,6 @@ const defaultSetup: TacticalSetup = {
 };
 
 const weaponMagazine: Record<Unit["weapon"], number> = { rifle: 24, shotgun: 8, smg: 30, carbine: 24 };
-const weaponReserve: Record<Unit["weapon"], number> = { rifle: 48, shotgun: 24, smg: 60, carbine: 48 };
 const weaponReloadTime: Record<Unit["weapon"], number> = { rifle: 2.4, shotgun: 3.2, smg: 2.1, carbine: 2.3 };
 const weaponRange: Record<Unit["weapon"], number> = { rifle: 9, shotgun: 5.8, smg: 7.2, carbine: 7.2 };
 const roleSpeed: Record<Unit["role"], number> = { MEDIC: 3.45, SCAVENGER: 3.3, RANGER: 3.55, ENGINEER: 3.35 };
@@ -62,7 +61,6 @@ export class Simulation {
         reloadDuration: weaponReloadTime[template.weapon],
         ammo: maxAmmo,
         maxAmmo,
-        reserveAmmo: weaponReserve[template.weapon],
         reloadTimer: 0,
         stress: 10 + index * 2,
         phase: index * 1.17,
@@ -280,7 +278,7 @@ export class Simulation {
 
   public issueReload(): void {
     if (this.state.missionStatus !== "active") return;
-    const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down" && unit.ammo < unit.maxAmmo && unit.reserveAmmo > 0);
+    const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down" && unit.ammo < unit.maxAmmo);
     for (const unit of selected) this.startReload(unit);
     if (selected.length) {
       this.pushEvent("SQUAD", `${selected.length > 1 ? "Selected survivors are" : `${selected[0].name} is`} reloading in place.`, "warning");
@@ -361,7 +359,7 @@ export class Simulation {
       extractedPersonIds: this.state.missionStatus === "success" ? standing.map((unit) => unit.personId) : [],
       downPersonIds: down.map((unit) => unit.personId),
       healthByPersonId: Object.fromEntries(this.state.units.map((unit) => [unit.personId, Math.round(unit.health)])),
-      ammunitionRemaining: this.state.units.reduce((sum, unit) => sum + unit.ammo + unit.reserveAmmo, 0),
+      loadedRounds: this.state.units.reduce((sum, unit) => sum + unit.ammo, 0),
       contactsNeutralised: this.state.contactsNeutralised,
       cachesRecovered: this.state.caches.filter((cache) => cache.secured).length,
       cacheCount: this.state.caches.length,
@@ -379,9 +377,7 @@ export class Simulation {
       if (unit.state === "reloading") {
         unit.reloadTimer -= dt;
         if (unit.reloadTimer <= 0) {
-          const loaded = Math.min(unit.maxAmmo - unit.ammo, unit.reserveAmmo);
-          unit.ammo += loaded;
-          unit.reserveAmmo -= loaded;
+          unit.ammo = unit.maxAmmo;
           unit.state = "holding";
         }
         continue;
@@ -430,7 +426,7 @@ export class Simulation {
         }
       }
 
-      if (unit.state === "holding" && unit.ammo === 0 && unit.reserveAmmo > 0) this.startReload(unit);
+      if (unit.state === "holding" && unit.ammo === 0) this.startReload(unit);
 
       const nearestContact = contacts.reduce<Contact | null>((nearest, contact) => {
         if (!contact.alive) return nearest;

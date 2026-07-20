@@ -8,7 +8,7 @@ const successfulOutcome = (personIds: string[]): MissionOutcome => ({
   extractedPersonIds: personIds,
   downPersonIds: [],
   healthByPersonId: Object.fromEntries(personIds.map((id) => [id, 100])),
-  ammunitionRemaining: 10,
+  loadedRounds: 10,
   contactsNeutralised: 12,
   cachesRecovered: 4,
   cacheCount: 4,
