@@ -142,7 +142,7 @@ export class Simulation {
       phase: this.random() * Math.PI * 2,
       heat: 0.7 + this.random() * 0.3,
       confidence: 0.45 + this.random() * 0.55,
-      health: kind === "runner" ? 3 : this.random() > 0.82 ? 2 : 1,
+      health: kind === "runner" ? 4 : this.random() > 0.82 ? 2 : 1,
       alive: true,
       hitFlash: 0,
       attackCooldown: this.random(),
@@ -522,7 +522,7 @@ export class Simulation {
     const state = this.state;
     const waveSize = this.setup.guidedDemo
       ? opening ? 10 : 4
-      : opening ? 8 + Math.floor(this.random() * 4) : 3 + Math.floor(this.random() * 3);
+      : opening ? 8 + Math.floor(this.random() * 4) : 4 + Math.floor(this.random() * 3);
     let spawned = 0;
     for (let index = 0; index < waveSize; index += 1) {
       const runner = this.makeContact(index + state.contacts.length, state.map, state.units, true, "runner");
