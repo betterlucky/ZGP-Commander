@@ -131,3 +131,6 @@ Project documentation:
 
 The source code is available under the [MIT License](LICENSE). The licence does
 not grant rights to the ZGP Commander name or branding.
+
+The runner-rush alarm uses [Red Alert Klaxon Re-Creation](https://freesound.org/people/wrstone/sounds/125714/)
+by wrstone, made available under CC0 through Freesound.

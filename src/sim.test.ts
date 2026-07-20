@@ -127,7 +127,7 @@ describe("Tactical squad orders", () => {
 
     expect(runner?.kind).toBe("runner");
     expect(runner?.speed).toBeGreaterThan(5.7);
-    expect(runner?.health).toBe(2);
+    expect(runner?.health).toBe(3);
     expect(walker && runner ? runner.speed > walker.speed * 4.5 : false).toBe(true);
   });
 

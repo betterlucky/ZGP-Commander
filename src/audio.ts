@@ -4,6 +4,7 @@ class TacticalAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
+  private runnerAlarm: HTMLAudioElement | null = null;
   private lastShot = 0;
 
   public resume(): void {
@@ -17,6 +18,9 @@ class TacticalAudio {
     this.master = this.context.createGain();
     this.master.gain.value = 0.34;
     this.master.connect(this.context.destination);
+    this.runnerAlarm = new Audio("./audio/runner-rush-klaxon.mp3");
+    this.runnerAlarm.preload = "auto";
+    this.runnerAlarm.volume = 0.44;
     this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
     const data = this.noiseBuffer.getChannelData(0);
     for (let index = 0; index < data.length; index += 1) data[index] = Math.random() * 2 - 1;
@@ -156,12 +160,22 @@ class TacticalAudio {
     window.setTimeout(() => this.tone(560, 820, 0.13, 0.12, "triangle", 0.12), 90);
   }
 
-  public runnerRush(): void {
+  private synthesizedRunnerRush(): void {
     // Long, low alternating blasts read as a physical warning klaxon rather
-    // than the short frequency sweeps of an arcade alert.
+    // than an arcade alert if the recorded asset cannot be played.
     this.klaxonBlast(285, 0.62, 0.2, -0.08, 0);
     this.klaxonBlast(218, 0.62, 0.22, 0.08, 0.7);
     this.klaxonBlast(285, 0.72, 0.2, -0.08, 1.4);
+  }
+
+  public runnerRush(): void {
+    const alarm = this.runnerAlarm;
+    if (!alarm) {
+      this.synthesizedRunnerRush();
+      return;
+    }
+    alarm.currentTime = 0;
+    void alarm.play().catch(() => this.synthesizedRunnerRush());
   }
 }
 
