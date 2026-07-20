@@ -99,24 +99,67 @@ describe("Tactical squad orders", () => {
     expect(closest).toBeGreaterThan(12);
   });
 
-  it("reserves rare runners for reinforcement spawns and makes them fast but fragile", () => {
+  it("makes runner contacts unmistakably faster but more fragile than walkers", () => {
     const simulation = new Simulation();
     const internals = simulation as unknown as {
-      random: () => number;
-      makeContact: (index: number, map: typeof simulation.state.map, units: typeof simulation.state.units, requireSafe: boolean, allowRunner: boolean) => typeof simulation.state.contacts[number] | null;
+      makeContact: (index: number, map: typeof simulation.state.map, units: typeof simulation.state.units, requireSafe: boolean, forcedKind: "walker" | "runner") => typeof simulation.state.contacts[number] | null;
     };
 
     expect(simulation.state.contacts.every((contact) => contact.kind === "walker")).toBe(true);
-    internals.random = () => 0.039;
-    const runner = internals.makeContact(0, simulation.state.map, simulation.state.units, true, true);
-    internals.random = () => 0.041;
-    const walker = internals.makeContact(0, simulation.state.map, simulation.state.units, true, true);
+    const runner = internals.makeContact(0, simulation.state.map, simulation.state.units, true, "runner");
+    const walker = internals.makeContact(0, simulation.state.map, simulation.state.units, true, "walker");
 
     expect(runner?.kind).toBe("runner");
-    expect(runner?.speed).toBeGreaterThan(2.1);
+    expect(runner?.speed).toBeGreaterThan(2.8);
     expect(runner?.health).toBe(1);
-    expect(walker?.kind).toBe("walker");
-    expect(walker && runner ? runner.speed > walker.speed * 2 : false).toBe(true);
+    expect(walker && runner ? runner.speed > walker.speed * 2.3 : false).toBe(true);
+  });
+
+  it("telegraphs one deterministic runner rush after the first guided-demo cache", () => {
+    const template = new Simulation();
+    const simulation = new Simulation({
+      missionTitle: "Guided test",
+      objectiveLabel: "Recover",
+      riskLabel: "RECOVERABLE",
+      threat: 0.42,
+      cacheCount: 3,
+      guidedDemo: true,
+      units: template.state.units.map((unit) => ({
+        personId: unit.personId,
+        name: unit.name,
+        role: unit.role,
+        color: unit.color,
+        weapon: unit.weapon,
+        health: unit.health,
+        scavengeSkill: unit.scavengeSkill,
+      })),
+    });
+    simulation.state.breachOpen = true;
+    simulation.state.map.breach.open = true;
+    simulation.state.caches[0].progress = 1;
+
+    simulation.update(0);
+
+    expect(simulation.state.runnerRushStatus).toBe("warning");
+    expect(simulation.state.runnerRushesTriggered).toBe(1);
+    expect(simulation.state.events[0].message).toContain("RUNNER RUSH INCOMING");
+
+    simulation.update(4.1);
+
+    expect(simulation.state.runnerRushStatus).toBe("active");
+    expect(simulation.state.contacts.filter((contact) => contact.alive && contact.kind === "runner")).toHaveLength(5);
+  });
+
+  it("never schedules more than two runner rushes in a campaign mission", () => {
+    const simulation = new Simulation();
+    const internals = simulation as unknown as { beginRunnerRush: () => void };
+    for (let index = 0; index < 3; index += 1) {
+      simulation.state.runnerRushStatus = "idle";
+      internals.beginRunnerRush();
+    }
+
+    expect(simulation.state.runnerRushesTriggered).toBe(2);
+    expect(simulation.state.runnerRushSequence).toBe(2);
   });
 
   it("turns live contact pressure into a substantially faster reinforcement cadence", () => {

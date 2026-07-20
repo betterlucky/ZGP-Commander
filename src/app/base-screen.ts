@@ -15,6 +15,40 @@ interface BaseScreenOptions {
 }
 
 type DemoDeploymentStage = "idle" | "roster" | "selecting" | "linking";
+type FacilityId = "operations" | "medical" | "workshop" | "logistics" | "quarters" | "records";
+
+const facilityDetails: Record<Exclude<FacilityId, "quarters">, { code: string; title: string; summary: string; features: string[] }> = {
+  operations: {
+    code: "OPS",
+    title: "OPERATIONS",
+    summary: "Operations turns incomplete field intelligence into choices: which opportunities matter, who should be sent and which risks the outpost can afford.",
+    features: ["Compare expiring opportunities and faction consequences", "Build squads around mission protocol and available ammunition", "Resume live Ghostlinks and review completed deployments"],
+  },
+  medical: {
+    code: "MED",
+    title: "MEDICAL",
+    summary: "Medical stabilises returned survivors and turns scarce supplies, staff time and difficult triage decisions into a path back to active duty.",
+    features: ["Diagnose persistent minor and major injuries", "Assign treatment priorities and recovery time", "Spend medical stores when waiting is too dangerous"],
+  },
+  workshop: {
+    code: "WRK",
+    title: "WORKSHOP",
+    summary: "The Workshop will maintain recovered equipment and adapt weapons to the strengths, injuries and preferred tactics of individual survivors.",
+    features: ["Repair and modify field equipment", "Turn salvage into weapons, armour and tools", "Balance reliable standard kit against specialised builds"],
+  },
+  logistics: {
+    code: "LOG",
+    title: "LOGISTICS",
+    summary: "Logistics controls what each squad can carry and how quickly the outpost can turn people, ammunition and salvage into another viable mission.",
+    features: ["Prepare mission loadouts and reserve ammunition", "Track consumables recovered or lost in transit", "Improve supply output through survivor assignments"],
+  },
+  records: {
+    code: "REC",
+    title: "RECORDS",
+    summary: "Records preserves the human cost of command: careers, injuries, rescues, missing survivors and the names that never return.",
+    features: ["Review individual mission histories and career totals", "Track missing survivors and rescue windows", "Memorialise permanent losses without erasing their story"],
+  },
+};
 
 const assignmentLabels: Record<BaseAssignment, string> = {
   general: "General duty",
@@ -55,6 +89,42 @@ const conditionLabel = (person: PersonRecord): string => {
   return "HEALTHY";
 };
 
+const renderFacilityModal = (
+  facilityId: FacilityId,
+  active: PersonRecord[],
+  returnedToday: Set<string>,
+  status: string,
+): string => {
+  if (facilityId === "quarters") {
+    return `
+      <section class="facility-overlay" id="facility-overlay" role="dialog" aria-modal="true" aria-labelledby="facility-title">
+        <div class="facility-dialog quarters-dialog">
+          <header><span><small>QTR · PERSONNEL OVERVIEW</small><strong id="facility-title">QUARTERS</strong></span><button id="close-facility" type="button" aria-label="Close Quarters">×</button></header>
+          <p>Every survivor persists between operations with their own role, equipment, condition, assignment and history. Returned personnel are highlighted below.</p>
+          <div class="facility-roster">
+            ${active.map((person) => `
+              <article class="facility-person tier-${person.tier} ${returnedToday.has(person.id) ? "returned" : ""}">
+                <span class="deployment-avatar">${person.callsign.slice(0, 1)}</span>
+                <span class="facility-person-identity"><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role}</small><i>${person.weapon.toUpperCase()} · ${assignmentLabels[person.assignment]}</i></span>
+                <span class="facility-person-state ${person.injuries.length ? "injured" : ""}"><b>${returnedToday.has(person.id) ? "RETURNED TODAY" : conditionLabel(person)}</b><small>${person.career.missions} MISSIONS · ${person.career.kills} NEUTRALISED</small></span>
+              </article>
+            `).join("")}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+  const detail = facilityDetails[facilityId];
+  return `
+    <section class="facility-overlay" id="facility-overlay" role="dialog" aria-modal="true" aria-labelledby="facility-title">
+      <div class="facility-dialog">
+        <header><span><small>${detail.code} · OUTPOST FACILITY</small><strong id="facility-title">${detail.title}</strong></span><button id="close-facility" type="button" aria-label="Close ${detail.title}">×</button></header>
+        <div class="facility-briefing"><small>CURRENT STATUS</small><b>${escapeHtml(status)}</b><p>${detail.summary}</p><ul>${detail.features.map((feature) => `<li>${feature}</li>`).join("")}</ul><span>CAMPAIGN SYSTEM · FURTHER DEVELOPMENT PLANNED</span></div>
+      </div>
+    </section>
+  `;
+};
+
 export const mountBaseScreen = (
   root: HTMLElement,
   campaign: Campaign,
@@ -68,6 +138,7 @@ export const mountBaseScreen = (
   let demoDeploymentStage: DemoDeploymentStage = "idle";
   let demoSelectedPersonId: string | null = null;
   let demoSequenceVersion = 0;
+  let openFacility: FacilityId | null = null;
   let notice = options.demoMode && campaign.state.operations.some((operation) => operation.status === "resolved")
     ? "Demo operation complete. Review the returned squad, field resources in transit and command log—or restart the showcase."
     : "Select an operation when you are ready. Base assignments remain provisional until the day ends.";
@@ -77,12 +148,23 @@ export const mountBaseScreen = (
     const active = campaign.activePeople();
     const available = campaign.availablePeople();
     const acted = new Set(state.actedPersonIds);
+    const returnedToday = new Set(state.operations
+      .filter((operation) => operation.launchedDay === state.day && operation.status === "resolved")
+      .flatMap((operation) => operation.result?.extractedPersonIds ?? []));
     const offers = campaign.availableOffers();
     const selectedOffer = offers.find((offer) => offer.id === selectedOfferId) ?? null;
     const injured = active.filter((person) => person.injuries.length > 0);
     const missing = state.people.filter((person) => person.campaignStatus === "mia");
     const dead = state.people.filter((person) => person.campaignStatus === "dead");
     const assignmentCount = (assignment: BaseAssignment): number => active.filter((person) => !acted.has(person.id) && person.assignment === assignment).length;
+    const facilityStatus: Record<FacilityId, string> = {
+      operations: `${offers.length} opportunities · ${campaign.unresolvedOperations().length} live link`,
+      medical: `${injured.length} injured · ${assignmentCount("medical")} assigned`,
+      workshop: `${assignmentCount("workshop")} assigned · +${assignmentCount("workshop") * 3} materials`,
+      logistics: `${assignmentCount("logistics")} assigned · +${assignmentCount("logistics") * 5} ammunition`,
+      quarters: `${active.length} active · ${available.length} available`,
+      records: `${missing.length} MIA · ${dead.length} memorialised`,
+    };
 
     root.innerHTML = `
       <main class="base-shell">
@@ -129,12 +211,12 @@ export const mountBaseScreen = (
               <span class="base-condition"><i></i> STABLE TELEMETRY</span>
             </div>
             <div class="base-map" aria-label="Outpost facility schematic">
-              <article class="facility operations-room live"><span class="facility-code">OPS</span><strong>OPERATIONS</strong><small>${offers.length} opportunities · ${campaign.unresolvedOperations().length} live link</small><div class="signal-rings"></div></article>
-              <article class="facility medical-room ${injured.length ? "attention" : ""}"><span class="facility-code">MED</span><strong>MEDICAL</strong><small>${injured.length} injured · ${assignmentCount("medical")} assigned</small><div class="bed-grid"><i></i><i></i><i></i></div></article>
-              <article class="facility workshop-room"><span class="facility-code">WRK</span><strong>WORKSHOP</strong><small>${assignmentCount("workshop")} assigned · +${assignmentCount("workshop") * 3} materials</small><div class="work-sparks"></div></article>
-              <article class="facility logistics-room"><span class="facility-code">LOG</span><strong>LOGISTICS</strong><small>${assignmentCount("logistics")} assigned · +${assignmentCount("logistics") * 5} ammo</small><div class="crate-stack"><i></i><i></i><i></i></div></article>
-              <article class="facility quarters-room"><span class="facility-code">QTR</span><strong>QUARTERS</strong><small>${active.length} active · ${available.length} available</small><div class="person-dots">${active.slice(0, 16).map((person) => `<i class="tier-${person.tier}" title="${escapeHtml(person.name)}"></i>`).join("")}</div></article>
-              <article class="facility memorial-room ${missing.length ? "attention" : ""}"><span class="facility-code">REC</span><strong>RECORDS</strong><small>${missing.length} MIA · ${dead.length} memorialised</small><div class="record-lines"></div></article>
+              <button class="facility operations-room live" data-facility="operations" type="button"><span class="facility-code">OPS</span><strong>OPERATIONS</strong><small>${facilityStatus.operations}</small><span class="facility-open">OPEN FACILITY</span><span class="signal-rings"></span></button>
+              <button class="facility medical-room ${injured.length ? "attention" : ""}" data-facility="medical" type="button"><span class="facility-code">MED</span><strong>MEDICAL</strong><small>${facilityStatus.medical}</small><span class="facility-open">OPEN FACILITY</span><span class="bed-grid"><i></i><i></i><i></i></span></button>
+              <button class="facility workshop-room" data-facility="workshop" type="button"><span class="facility-code">WRK</span><strong>WORKSHOP</strong><small>${facilityStatus.workshop}</small><span class="facility-open">OPEN FACILITY</span><span class="work-sparks"></span></button>
+              <button class="facility logistics-room" data-facility="logistics" type="button"><span class="facility-code">LOG</span><strong>LOGISTICS</strong><small>${facilityStatus.logistics}</small><span class="facility-open">OPEN FACILITY</span><span class="crate-stack"><i></i><i></i><i></i></span></button>
+              <button class="facility quarters-room" data-facility="quarters" type="button"><span class="facility-code">QTR</span><strong>QUARTERS</strong><small>${facilityStatus.quarters}</small><span class="facility-open">VIEW ROSTER</span><span class="person-dots">${active.slice(0, 16).map((person) => `<i class="tier-${person.tier}" title="${escapeHtml(person.name)}"></i>`).join("")}</span></button>
+              <button class="facility memorial-room ${missing.length ? "attention" : ""}" data-facility="records" type="button"><span class="facility-code">REC</span><strong>RECORDS</strong><small>${facilityStatus.records}</small><span class="facility-open">OPEN FACILITY</span><span class="record-lines"></span></button>
               <svg class="base-connections" viewBox="0 0 1000 600" preserveAspectRatio="none" aria-hidden="true"><path d="M190 165 L500 150 L810 175 M500 150 L500 430 M190 430 L500 430 L810 420 M190 165 L190 430 M810 175 L810 420" /></svg>
             </div>
             <div class="command-footer">
@@ -184,6 +266,7 @@ export const mountBaseScreen = (
           active.length,
         ) : ""}
         ${demoIntroVisible ? renderDemoIntro() : ""}
+        ${openFacility ? renderFacilityModal(openFacility, active, returnedToday, facilityStatus[openFacility]) : ""}
       </main>
     `;
 
@@ -217,7 +300,7 @@ export const mountBaseScreen = (
     selectedPeople.clear();
     render();
 
-    let delay = 1400;
+    let delay = 650;
     for (const person of team) {
       queueStep(delay, () => {
         demoDeploymentStage = "selecting";
@@ -225,14 +308,13 @@ export const mountBaseScreen = (
         selectedPeople.add(person.id);
         render();
       });
-      delay += 400;
+      delay += 1150;
     }
-    queueStep(delay + 350, () => {
+    queueStep(delay + 500, () => {
       demoDeploymentStage = "linking";
       demoSelectedPersonId = null;
       render();
     });
-    queueStep(delay + 1100, () => launchOperation(offer));
   };
 
   const bindEvents = (selectedOffer: MissionOffer | null): void => {
@@ -251,6 +333,20 @@ export const mountBaseScreen = (
         else selectedPeople.add(personId);
         render();
       });
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-facility]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openFacility = button.dataset.facility as FacilityId;
+        render();
+      });
+    });
+    const closeFacility = (): void => {
+      openFacility = null;
+      render();
+    };
+    root.querySelector<HTMLButtonElement>("#close-facility")?.addEventListener("click", closeFacility);
+    root.querySelector<HTMLElement>("#facility-overlay")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) closeFacility();
     });
     root.querySelectorAll<HTMLSelectElement>("[data-assignment]").forEach((select) => {
       select.addEventListener("change", () => {
@@ -316,7 +412,7 @@ const renderDemoIntro = (): string => `
     <div class="demo-intro-card">
       <small>OPENAI BUILD WEEK · PLAYABLE SHOWCASE</small>
       <h1 id="demo-title">COMMAND THE LINK.<br><span>LIVE WITH THE CONSEQUENCES.</span></h1>
-      <p>ZGP Commander is a squad tactics game played through an incomplete remote sensor reconstruction. Combat is automatic but you give the orders; those decisions will be who to risk, where to hold, how much to salvage and when to leave.</p>
+      <p>ZGP Commander is a squad tactics game played through an incomplete remote sensor reconstruction. You give the orders but the team do the fighting. You decide who to risk, where to hold and how much loot you really need. Make sure you know when to leave before your team have to pay too high a price.</p>
       <ol>
         <li><b>Deploy</b><span>A balanced four-person squad is ready.</span></li>
         <li><b>Recover</b><span>Breach the site and secure at least one cache.</span></li>
@@ -341,6 +437,13 @@ const renderDeploymentPlanner = (
   rosterSize = available.length,
 ): string => {
   const selected = available.filter((person) => selectedPeople.has(person.id));
+  const demoFocus = available.find((person) => person.id === demoSelectedPersonId) ?? null;
+  const demoRoleReason: Record<PersonRecord["role"], string> = {
+    MEDIC: "medical support keeps the team standing",
+    SCAVENGER: "specialist recovery gets the cache transferred faster",
+    RANGER: "long-range cover controls the approach",
+    ENGINEER: "technical skill and a carbine round out the team",
+  };
   const ammoCost = selected.reduce((total, person) => total + deploymentAmmoCost(offer, person), 0);
   const missionProtocol = offer.kind === "rescue" ? "rescue" : offer.kind;
   const difference = selected.length - offer.protocolSquad;
@@ -348,9 +451,9 @@ const renderDeploymentPlanner = (
   const demoGuide = demoStage === "roster"
     ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>YOUR ROSTER</small><b>This is your roster. You currently have ${rosterSize} survivors, but for this mission we're taking out a team of ${offer.protocolSquad}.</b></div>`
     : demoStage === "selecting"
-      ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>SELECTING TEAM · ${selected.length}/${offer.protocolSquad}</small><b>A balanced team is being assigned to the mission.</b></div>`
+      ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>SELECTING TEAM · ${selected.length}/${offer.protocolSquad}</small><b>${demoFocus ? `${escapeHtml(demoFocus.callsign)}: ${demoRoleReason[demoFocus.role]}.` : "A balanced team is being assigned to the mission."}</b></div>`
       : demoStage === "linking"
-        ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>TEAM READY</small><b>${selected.length} survivors selected. Establishing the link.</b></div>`
+        ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>TEAM READY</small><b>${selected.length} survivors selected. Review the team, then click Establish Link.</b></div>`
         : "";
   return `
     <section class="deployment-overlay">
@@ -374,7 +477,7 @@ const renderDeploymentPlanner = (
         <footer>
           <div><small>DEPLOYMENT PROTOCOL</small><b>${squadProtocol}</b></div>
           <div><small>DEPLOYMENT AMMUNITION</small><b class="${ammoCost > availableAmmo ? "insufficient" : ""}">${ammoCost} / ${availableAmmo}</b></div>
-          <button class="warm-button" id="launch-operation" type="button" ${selected.length === 0 || ammoCost > availableAmmo || demoStage !== "idle" ? "disabled" : ""}>ESTABLISH LINK</button>
+          <button class="warm-button" id="launch-operation" type="button" ${selected.length === 0 || ammoCost > availableAmmo || (demoStage !== "idle" && demoStage !== "linking") ? "disabled" : ""}>ESTABLISH LINK</button>
         </footer>
       </div>
     </section>

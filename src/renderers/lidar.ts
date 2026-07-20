@@ -289,9 +289,14 @@ export class LidarRenderer {
     ctx.fillStyle = unit.color; ctx.fillText(`${unit.id} ${unit.name}`, label.x, label.y); ctx.restore();
 
     if (unit.state === "collecting") {
+      const cache = state.caches.find((candidate) => candidate.id === unit.interaction);
+      const progress = cache?.progress ?? 0;
       const marker = transform.toScreen(unit.pos, 2.85);
-      ctx.save(); ctx.strokeStyle = "#ffc04b"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(marker.x, marker.y, 5 + Math.sin(state.elapsed * 3) * 1.2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      const barWidth = 92;
+      ctx.save(); ctx.fillStyle = "rgba(30,18,3,.94)"; ctx.strokeStyle = "#ffc04b"; ctx.lineWidth = 1.2;
+      ctx.fillRect(marker.x - barWidth / 2, marker.y - 11, barWidth, 14); ctx.strokeRect(marker.x - barWidth / 2, marker.y - 11, barWidth, 14);
+      ctx.fillStyle = "rgba(255,179,49,.34)"; ctx.fillRect(marker.x - barWidth / 2 + 1, marker.y - 10, (barWidth - 2) * progress, 12);
+      ctx.fillStyle = "#ffd17a"; ctx.font = "800 8px monospace"; ctx.textAlign = "center"; ctx.fillText(`SCAVENGING ${Math.round(progress * 100)}%`, marker.x, marker.y); ctx.restore();
     }
     if (unit.state === "reloading") {
       const progress = 1 - unit.reloadTimer / unit.reloadDuration;
@@ -342,7 +347,15 @@ export class LidarRenderer {
     this.addLimb(points, contact.pos, { x: -right.x * 0.27, y: -right.y * 0.27, z: 1.2 }, { x: -right.x * 0.52 + forward.x * 0.65, y: -right.y * 0.52 + forward.y * 0.65, z: 0.75 }, random, 8);
     const flicker = 0.68 + Math.sin(state.elapsed * 8 + contact.id) * 0.18;
     ctx.save(); ctx.globalAlpha = flicker;
-    this.drawCloud(ctx, transform, points, contact.hitFlash > 0 ? "#ffd8a0" : contact.kind === "runner" ? "#ff6038" : "#ed3f36", 5);
+    this.drawCloud(ctx, transform, points, contact.hitFlash > 0 ? "#fff0c2" : contact.kind === "runner" ? "#ffb13d" : "#ed3f36", contact.kind === "runner" ? 9 : 5);
+    if (contact.kind === "runner") {
+      const marker = transform.toScreen(contact.pos, 2.55);
+      const trail = transform.toScreen({ x: contact.pos.x - Math.cos(contact.facing) * 1.8, y: contact.pos.y - Math.sin(contact.facing) * 1.8 }, 1.1);
+      ctx.strokeStyle = "rgba(255,190,72,.84)"; ctx.lineWidth = 1.5; ctx.shadowColor = "#ffb13d"; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.moveTo(trail.x, trail.y); ctx.lineTo(marker.x, marker.y + 14); ctx.stroke();
+      ctx.fillStyle = "rgba(44,18,3,.92)"; ctx.fillRect(marker.x - 25, marker.y - 9, 50, 13); ctx.strokeRect(marker.x - 25, marker.y - 9, 50, 13);
+      ctx.fillStyle = "#ffd07a"; ctx.font = "800 8px monospace"; ctx.textAlign = "center"; ctx.fillText("RUNNER", marker.x, marker.y);
+    }
     ctx.restore();
   }
 

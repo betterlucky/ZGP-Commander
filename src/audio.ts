@@ -106,6 +106,13 @@ class TacticalAudio {
     this.tone(420, 660, 0.12, 0.13, "triangle", -0.12);
     window.setTimeout(() => this.tone(560, 820, 0.13, 0.12, "triangle", 0.12), 90);
   }
+
+  public runnerRush(): void {
+    this.noise(0.42, 0.28, "bandpass", 680);
+    this.tone(640, 360, 0.28, 0.2, "sawtooth", -0.35);
+    window.setTimeout(() => this.tone(640, 360, 0.28, 0.2, "sawtooth", 0.35), 340);
+    window.setTimeout(() => this.tone(760, 420, 0.34, 0.22, "square"), 680);
+  }
 }
 
 export const tacticalAudio = new TacticalAudio();

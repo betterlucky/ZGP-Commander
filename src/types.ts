@@ -6,6 +6,7 @@ export interface Vec2 {
 export type UnitState = "moving" | "holding" | "collecting" | "reloading" | "down";
 export type Role = "MEDIC" | "SCAVENGER" | "RANGER" | "ENGINEER";
 export type ContactKind = "walker" | "runner";
+export type RunnerRushStatus = "idle" | "warning" | "active";
 
 export interface Unit {
   id: number;
@@ -143,6 +144,10 @@ export interface SimulationState {
   hitSequence: number;
   breachSequence: number;
   cacheSequence: number;
+  runnerRushStatus: RunnerRushStatus;
+  runnerRushWarning: number;
+  runnerRushSequence: number;
+  runnerRushesTriggered: number;
   units: Unit[];
   contacts: Contact[];
   map: FacilityMap;
@@ -165,6 +170,7 @@ export interface TacticalSetup {
   riskLabel: string;
   threat: number;
   cacheCount?: number;
+  guidedDemo?: boolean;
   units: TacticalUnitSetup[];
 }
 

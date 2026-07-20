@@ -347,8 +347,9 @@ export class GpuLidarRenderer {
     this.drawOrders(ctx, state, transform);
     this.drawObjectives(ctx, state, transform);
     this.labelBounds.length = 0;
-    for (const unit of state.units) if (!unit.selected) this.drawUnitOverlay(ctx, unit, transform, this.labelBounds);
-    for (const unit of state.units) if (unit.selected) this.drawUnitOverlay(ctx, unit, transform, this.labelBounds);
+    this.drawRunnerMarkers(ctx, state, transform);
+    for (const unit of state.units) if (!unit.selected) this.drawUnitOverlay(ctx, unit, state, transform, this.labelBounds);
+    for (const unit of state.units) if (unit.selected) this.drawUnitOverlay(ctx, unit, state, transform, this.labelBounds);
     this.drawScanOverlay(ctx, width, height, state);
   }
 
@@ -598,10 +599,10 @@ export class GpuLidarRenderer {
         const fade = contact.alive ? 1 : Math.min(1, contact.hitFlash);
         const flash = Math.min(1, contact.hitFlash);
         const verticalOffset = Math.sin(time * 3 + contact.phase) * 0.025;
-        const green = (contact.kind === "runner" ? 0.13 : 0.045) + flash * 0.72;
-        const blue = (contact.kind === "runner" ? 0.028 : 0.018) + flash * 0.38;
+        const green = (contact.kind === "runner" ? 0.52 : 0.045) + flash * 0.48;
+        const blue = (contact.kind === "runner" ? 0.07 : 0.018) + flash * 0.32;
         const alphaScale = contact.confidence * fade;
-        const sizeScale = 3.35 + flash * 1.2;
+        const sizeScale = (contact.kind === "runner" ? 3.75 : 3.35) + flash * 1.2;
         for (const point of points) {
           const localX = point.x + (contact.kind === "runner" ? point.z * 0.18 : 0);
           const x = originX + localX * cos - point.y * sin;
@@ -703,7 +704,28 @@ export class GpuLidarRenderer {
     ctx.beginPath(); ctx.ellipse(extraction.x, extraction.y, 13, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
   }
 
-  private drawUnitOverlay(ctx: CanvasRenderingContext2D, unit: Unit, transform: IsoTransform, labels: Array<{ left: number; top: number; right: number; bottom: number }>): void {
+  private drawRunnerMarkers(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
+    const runners = state.contacts.filter((contact) => contact.alive && contact.kind === "runner");
+    if (!runners.length) return;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "800 8px monospace";
+    for (const runner of runners) {
+      const marker = transform.toScreen(this.offsetPoint(runner.pos), 2.55);
+      const trail = transform.toScreen(this.offsetPoint({ x: runner.pos.x - Math.cos(runner.facing) * 1.8, y: runner.pos.y - Math.sin(runner.facing) * 1.8 }), 1.1);
+      ctx.strokeStyle = "rgba(255,190,72,.8)";
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = "#ffb13d";
+      ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.moveTo(trail.x, trail.y); ctx.lineTo(marker.x, marker.y + 14); ctx.stroke();
+      ctx.fillStyle = "rgba(44,18,3,.92)"; ctx.fillRect(marker.x - 25, marker.y - 9, 50, 13);
+      ctx.strokeRect(marker.x - 25, marker.y - 9, 50, 13);
+      ctx.fillStyle = "#ffd07a"; ctx.fillText("RUNNER", marker.x, marker.y);
+    }
+    ctx.restore();
+  }
+
+  private drawUnitOverlay(ctx: CanvasRenderingContext2D, unit: Unit, state: SimulationState, transform: IsoTransform, labels: Array<{ left: number; top: number; right: number; bottom: number }>): void {
     const point = transform.toScreen(this.offsetPoint(unit.pos), 2.45);
     const ground = transform.toScreen(this.offsetPoint(unit.pos), 0.02);
     ctx.save();
@@ -728,15 +750,27 @@ export class GpuLidarRenderer {
       this.labelWidths.set(unit.id, width);
     }
     let labelY = point.y;
-    let bounds = { left: point.x - width / 2, top: labelY - 11, right: point.x + width / 2, bottom: labelY + 4 };
+    const scavenging = unit.state === "collecting" && !!unit.interaction;
+    let bounds = { left: point.x - width / 2, top: labelY - (scavenging ? 28 : 11), right: point.x + width / 2, bottom: labelY + 4 };
     while (labels.some((other) => bounds.left < other.right && bounds.right > other.left && bounds.top < other.bottom && bounds.bottom > other.top)) {
       labelY -= 17;
-      bounds = { ...bounds, top: labelY - 11, bottom: labelY + 4 };
+      bounds = { ...bounds, top: labelY - (scavenging ? 28 : 11), bottom: labelY + 4 };
     }
     labels.push(bounds);
-    ctx.fillStyle = "rgba(2,8,12,.92)"; ctx.fillRect(bounds.left, bounds.top, width, 15);
-    ctx.strokeStyle = unit.selected ? "rgba(110,239,255,.9)" : "rgba(95,225,250,.36)"; ctx.strokeRect(bounds.left, bounds.top, width, 15);
+    ctx.fillStyle = "rgba(2,8,12,.92)"; ctx.fillRect(bounds.left, labelY - 11, width, 15);
+    ctx.strokeStyle = unit.selected ? "rgba(110,239,255,.9)" : "rgba(95,225,250,.36)"; ctx.strokeRect(bounds.left, labelY - 11, width, 15);
     ctx.fillStyle = "#83ecff"; ctx.textAlign = "center"; ctx.fillText(label, point.x, labelY);
+    if (scavenging) {
+      const cache = state.caches.find((candidate) => candidate.id === unit.interaction);
+      const progress = cache?.progress ?? 0;
+      const barWidth = Math.max(82, width);
+      const barX = point.x - barWidth / 2;
+      const barY = labelY - 27;
+      ctx.fillStyle = "rgba(30,18,3,.94)"; ctx.fillRect(barX, barY, barWidth, 12);
+      ctx.strokeStyle = "rgba(255,193,76,.82)"; ctx.strokeRect(barX, barY, barWidth, 12);
+      ctx.fillStyle = "rgba(255,179,49,.34)"; ctx.fillRect(barX + 1, barY + 1, (barWidth - 2) * progress, 10);
+      ctx.fillStyle = "#ffd17a"; ctx.font = "800 8px monospace"; ctx.fillText(`SCAVENGING ${Math.round(progress * 100)}%`, point.x, barY + 9);
+    }
     if (unit.shotFlash > 0) {
       const muzzle = transform.toScreen(this.offsetPoint({ x: unit.pos.x + Math.cos(unit.facing) * 1.35, y: unit.pos.y + Math.sin(unit.facing) * 1.35 }), 1.35);
       ctx.fillStyle = `rgba(255,235,165,${unit.shotFlash})`; ctx.shadowColor = "#fff0a8"; ctx.shadowBlur = 16;

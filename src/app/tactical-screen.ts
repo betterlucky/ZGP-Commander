@@ -53,6 +53,7 @@ export const mountTacticalScreen = (
     riskLabel: deployment.offer.risk,
     threat: demoMode ? Math.min(deployment.offer.threat, 0.42) : deployment.offer.threat,
     cacheCount: deployment.offer.kind === "rescue" ? 1 : demoMode ? 3 : 6,
+    guidedDemo: demoMode,
     units: deployment.people.map((person) => ({
       personId: person.id,
       name: person.callsign,
@@ -69,6 +70,7 @@ export const mountTacticalScreen = (
   let lastHitSequence = 0;
   let lastBreachSequence = 0;
   let lastCacheSequence = 0;
+  let lastRunnerRushSequence = 0;
 
   root.innerHTML = `
     <main class="shell tactical-shell">
@@ -113,6 +115,7 @@ export const mountTacticalScreen = (
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
           ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b></div>` : ""}
+          <div class="runner-alert ${demoMode ? "with-guide" : ""}" id="runner-alert" role="alert"><small>FAST CONTACTS</small><b>RUNNER RUSH INCOMING</b><span>BRACE</span></div>
           <button class="viewport-extract-button" id="viewport-extract-button" type="button">CALL EXTRACTION · ALL STANDING SURVIVORS READY</button>
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
           <div class="retask-hint" id="retask-hint" role="status" aria-live="polite">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · DOUBLE-CLICK CARD / 1–9 FOCUS</div>
@@ -218,6 +221,11 @@ export const mountTacticalScreen = (
     get("#signal-value").textContent = `${Math.round(89 + Math.sin(state.signalPulse * .8) * 4)}%`;
     const recovered = state.caches.filter((cache) => cache.secured).length;
     const activeCache = state.caches.find((cache) => !cache.secured && cache.progress > 0);
+    const retaskHint = get("#retask-hint");
+    if (!activeCache && retaskHint.textContent?.includes("SCAVENGING")) {
+      retaskHint.textContent = recovered ? "CACHE SECURED · EXTRACT OR PUSH DEEPER" : "SCAVENGE INTERRUPTED · ISSUE A NEW ORDER";
+      retaskHint.classList.remove("attention");
+    }
     get("#breach-heading").textContent = state.breachOpen ? "ENTRY BREACH OPEN" : "ENTRY BREACH CLOSED";
     get("#breach-copy").textContent = state.breachOpen ? "Interior access available" : "Press F to open the marked entry";
     get("#cache-fraction").textContent = `${recovered} / ${state.caches.length}`;
@@ -247,6 +255,12 @@ export const mountTacticalScreen = (
     get("#composure").textContent = `${Math.round(100 - state.units.reduce((sum, unit) => sum + unit.stress, 0) / state.units.length)}%`;
     get("#ammo-total").textContent = state.units.reduce((sum, unit) => sum + unit.ammo + unit.reserveAmmo, 0).toString();
     get("#neutralised").textContent = state.contactsNeutralised.toString();
+    const runnerAlert = get("#runner-alert");
+    runnerAlert.classList.toggle("active", state.runnerRushStatus !== "idle");
+    runnerAlert.classList.toggle("warning", state.runnerRushStatus === "warning");
+    runnerAlert.innerHTML = state.runnerRushStatus === "warning"
+      ? `<small>FAST CONTACTS</small><b>RUNNER RUSH INCOMING</b><span>BRACE · ${Math.max(1, Math.ceil(state.runnerRushWarning))}</span>`
+      : `<small>FAST CONTACTS</small><b>RUNNER RUSH</b><span>HOLD THE LINE</span>`;
     const extractReady = simulation.canExtract();
     get("#extraction-heading").textContent = extractReady ? "SQUAD IN EXTRACTION" : recovered ? "WITHDRAWAL AVAILABLE" : "EXTRACTION MARKED";
     get("#extraction-copy").textContent = recovered ? (extractReady ? "Standing survivors ready for pickup" : `Return to landing with ${recovered} recovered cache${recovered === 1 ? "" : "s"}`) : "Recover at least one cache before withdrawing";
@@ -303,10 +317,12 @@ export const mountTacticalScreen = (
     if (state.hitSequence > lastHitSequence) tacticalAudio.survivorHit();
     if (state.breachSequence > lastBreachSequence) tacticalAudio.breach();
     if (state.cacheSequence > lastCacheSequence) tacticalAudio.cacheSecured();
+    if (state.runnerRushSequence > lastRunnerRushSequence) tacticalAudio.runnerRush();
     lastKillSequence = state.killSequence;
     lastHitSequence = state.hitSequence;
     lastBreachSequence = state.breachSequence;
     lastCacheSequence = state.cacheSequence;
+    lastRunnerRushSequence = state.runnerRushSequence;
   };
 
   const updateCameraTransition = (now: number): void => {
