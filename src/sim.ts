@@ -23,7 +23,7 @@ const weaponRange: Record<Unit["weapon"], number> = { rifle: 9, shotgun: 5.8, sm
 const roleSpeed: Record<Unit["role"], number> = { MEDIC: 3.45, SCAVENGER: 3.3, RANGER: 3.55, ENGINEER: 3.35 };
 const safeSpawnDistance = 16;
 const runnerRushWarningDuration = 4;
-const runnerRushDuration = 15;
+const runnerRushDuration = 12;
 const maximumRunnerRushes = 2;
 
 export class Simulation {
@@ -305,18 +305,19 @@ export class Simulation {
     if (state.breachOpen) this.spawnTimer -= dt;
     const living = state.contacts.filter((contact) => contact.alive).length;
     const livingWalkers = state.contacts.filter((contact) => contact.alive && contact.kind === "walker").length;
-    const contactLimit = 16 + Math.round(state.threat * 18);
+    const recoveredCaches = state.caches.filter((cache) => cache.secured).length;
+    const contactLimit = 17 + Math.round(state.threat * 22);
     if (state.breachOpen && this.spawnTimer <= 0 && livingWalkers < contactLimit) {
       const newcomer = this.makeContact(Math.floor(this.random() * state.map.contactSpawns.length), state.map, state.units, true);
       if (newcomer) {
         state.contacts.push(newcomer);
         const lowPressure = 1 - state.threat;
-        this.spawnTimer = 1.6 + lowPressure * 3.8 + this.random() * (0.7 + lowPressure * 1.1);
+        this.spawnTimer = 1.35 + lowPressure * 3.5 + this.random() * (0.65 + lowPressure);
         if (this.random() > 0.58) this.pushEvent("SENSOR", "New contact crossing an external wall entry.", "warning");
       } else this.spawnTimer = 1;
     }
     state.contacts = state.contacts.filter((contact) => contact.alive || contact.hitFlash > 0);
-    state.threat = clamp(this.setup.threat * 0.55 + living / 40 + state.elapsed / 520, 0, 1);
+    state.threat = clamp(this.setup.threat * 0.55 + living / 38 + state.elapsed / 420 + recoveredCaches * 0.12, 0, 1);
     if (state.units.every((unit) => unit.state === "down")) {
       state.missionStatus = "failure";
       state.paused = true;
@@ -543,7 +544,7 @@ export class Simulation {
       state.runnerRushRemaining = spawned ? runnerRushDuration : 0;
       this.runnerWaveTimer = 3 + this.random() * 2;
       this.runnerRushCheckTimer = 30 + this.random() * 20;
-      this.pushEvent("SENSOR", spawned ? `${spawned} runners entering at speed. Fresh contacts expected for fifteen seconds.` : "Runner approach lost beyond sensor range.", "warning");
+      this.pushEvent("SENSOR", spawned ? `${spawned} runners entering at speed. Fresh contacts expected for twelve seconds.` : "Runner approach lost beyond sensor range.", "warning");
       return;
     }
     if (state.runnerRushStatus === "active") {

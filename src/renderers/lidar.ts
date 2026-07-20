@@ -289,7 +289,7 @@ export class LidarRenderer {
     ctx.shadowColor = unit.color; ctx.shadowBlur = 5; ctx.lineWidth = 1.05; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(head.x, head.y); ctx.lineTo(chest.x, chest.y); ctx.lineTo(hip.x, hip.y); ctx.lineTo(leftFoot.x, leftFoot.y);
     ctx.moveTo(hip.x, hip.y); ctx.lineTo(rightFoot.x, rightFoot.y); ctx.moveTo(chest.x, chest.y); ctx.lineTo(weaponEnd.x, weaponEnd.y); ctx.stroke(); ctx.restore();
-    this.drawCloud(ctx, transform, points, unit.state === "down" ? "#ef5b4c" : unit.state === "reloading" ? "#ffc45b" : unit.color, 8);
+    this.drawCloud(ctx, transform, points, unit.state === "down" ? "#ef5b4c" : unit.state === "reloading" ? "#ffc45b" : unit.color, 8, state.elapsed, unit.id);
 
     if (unit.shotFlash > 0) {
       const muzzle = transform.toScreen({ x: unit.pos.x + forward.x * 1.4, y: unit.pos.y + forward.y * 1.4 }, 1.37);
@@ -370,7 +370,7 @@ export class LidarRenderer {
     this.addLimb(points, contact.pos, { x: -right.x * 0.27, y: -right.y * 0.27, z: 1.2 }, { x: -right.x * 0.52 + forward.x * 0.65, y: -right.y * 0.52 + forward.y * 0.65, z: 0.75 }, random, 8);
     const flicker = 0.68 + Math.sin(state.elapsed * 8 + contact.id) * 0.18;
     ctx.save(); ctx.globalAlpha = flicker;
-    this.drawCloud(ctx, transform, points, contact.hitFlash > 0 ? "#fff0c2" : contact.kind === "runner" ? "#ffb13d" : "#ed3f36", contact.kind === "runner" ? 9 : 5);
+    this.drawCloud(ctx, transform, points, contact.hitFlash > 0 ? "#fff0c2" : contact.kind === "runner" ? "#ffb13d" : "#ed3f36", contact.kind === "runner" ? 9 : 5, state.elapsed, contact.id + 100);
     if (contact.kind === "runner") {
       const marker = transform.toScreen(contact.pos, 2.55);
       const trail = transform.toScreen({ x: contact.pos.x - Math.cos(contact.facing) * 1.8, y: contact.pos.y - Math.sin(contact.facing) * 1.8 }, 1.1);
@@ -382,10 +382,15 @@ export class LidarRenderer {
     ctx.restore();
   }
 
-  private drawCloud(ctx: CanvasRenderingContext2D, transform: IsoTransform, points: Point3[], color: string, blur: number): void {
+  private drawCloud(ctx: CanvasRenderingContext2D, transform: IsoTransform, points: Point3[], color: string, blur: number, time: number, seed: number): void {
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = blur;
-    for (const cloudPoint of points) {
-      const point = transform.toScreen(cloudPoint, cloudPoint.z);
+    for (let index = 0; index < points.length; index += 1) {
+      const cloudPoint = points[index];
+      const phase = seed * 12.9898 + index * 1.618;
+      const point = transform.toScreen({
+        x: cloudPoint.x + Math.sin(phase + time * 1.85) * 0.022,
+        y: cloudPoint.y + Math.cos(phase * 1.31 - time * 1.47) * 0.022,
+      }, cloudPoint.z + Math.sin(phase * 0.73 + time * 1.23) * 0.012);
       ctx.globalAlpha = cloudPoint.alpha ?? 0.65;
       const size = cloudPoint.size ?? 1;
       ctx.fillRect(point.x, point.y, size, size);

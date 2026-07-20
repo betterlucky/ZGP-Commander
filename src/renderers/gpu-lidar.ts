@@ -57,9 +57,15 @@ uniform float u_time;
 out vec4 v_color;
 out float v_sweep;
 void main() {
+  float sensorPhase = dot(a_position, vec3(12.9898, 78.233, 37.719));
+  vec3 reconstructedPosition = a_position + vec3(
+    sin(sensorPhase + u_time * 1.85) * 0.022,
+    cos(sensorPhase * 1.31 - u_time * 1.47) * 0.022,
+    sin(sensorPhase * 0.73 + u_time * 1.23) * 0.012
+  );
   vec2 pixel = u_origin + vec2(
-    (a_position.x - a_position.y) * u_tile.x * 0.5,
-    (a_position.x + a_position.y) * u_tile.y * 0.5 - a_position.z * u_tile.y
+    (reconstructedPosition.x - reconstructedPosition.y) * u_tile.x * 0.5,
+    (reconstructedPosition.x + reconstructedPosition.y) * u_tile.y * 0.5 - reconstructedPosition.z * u_tile.y
   );
   vec2 clip = vec2(pixel.x / u_resolution.x * 2.0 - 1.0, 1.0 - pixel.y / u_resolution.y * 2.0);
   gl_Position = vec4(clip, 0.0, 1.0);

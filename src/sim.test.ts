@@ -163,7 +163,7 @@ describe("Tactical squad orders", () => {
     simulation.update(4.1);
 
     expect(simulation.state.runnerRushStatus).toBe("active");
-    expect(simulation.state.runnerRushRemaining).toBe(15);
+    expect(simulation.state.runnerRushRemaining).toBe(12);
     expect(simulation.state.contacts.filter((contact) => contact.alive && contact.kind === "runner")).toHaveLength(10);
 
     const runnerIds = new Set(simulation.state.contacts.filter((contact) => contact.kind === "runner").map((contact) => contact.id));
@@ -172,7 +172,7 @@ describe("Tactical squad orders", () => {
     internals.updateRunnerRush(0.1);
 
     expect(simulation.state.contacts.filter((contact) => contact.kind === "runner" && !runnerIds.has(contact.id))).toHaveLength(4);
-    expect(simulation.state.runnerRushRemaining).toBeCloseTo(14.9);
+    expect(simulation.state.runnerRushRemaining).toBeCloseTo(11.9);
   });
 
   it("keeps walker reinforcements active during a runner rush", () => {
@@ -181,7 +181,7 @@ describe("Tactical squad orders", () => {
     simulation.state.breachOpen = true;
     simulation.state.map.breach.open = true;
     simulation.state.runnerRushStatus = "active";
-    simulation.state.runnerRushRemaining = 15;
+    simulation.state.runnerRushRemaining = 12;
     internals.spawnTimer = 0;
     internals.runnerWaveTimer = 99;
     const walkersBefore = simulation.state.contacts.filter((contact) => contact.kind === "walker").length;
@@ -237,12 +237,16 @@ describe("Tactical squad orders", () => {
   });
 
   it("turns live contact pressure into a substantially faster reinforcement cadence", () => {
-    const nextSpawnDelay = (pressure: number): number => {
+    const nextSpawnDelay = (pressure: number, recoveredCaches?: number): number => {
       const simulation = new Simulation();
       const internals = simulation as unknown as { random: () => number; spawnTimer: number };
       simulation.state.breachOpen = true;
       simulation.state.map.breach.open = true;
       simulation.state.threat = pressure;
+      if (recoveredCaches !== undefined) {
+        simulation.state.caches.slice(0, recoveredCaches).forEach((cache) => { cache.secured = true; });
+        simulation.update(0);
+      }
       internals.spawnTimer = 0;
       internals.random = () => 0.5;
       simulation.update(0);
@@ -253,5 +257,6 @@ describe("Tactical squad orders", () => {
     const highPressureDelay = nextSpawnDelay(0.9);
 
     expect(lowPressureDelay).toBeGreaterThan(highPressureDelay + 3);
+    expect(nextSpawnDelay(0.5, 3)).toBeLessThan(nextSpawnDelay(0.5, 0));
   });
 });

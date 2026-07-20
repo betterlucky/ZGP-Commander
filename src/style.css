@@ -112,6 +112,8 @@ button { font: inherit; color: inherit; }
 .zoom-readout { position: absolute; left: 18px; bottom: 18px; display: flex; align-items: center; background: rgba(3,9,12,.84); border: 1px solid var(--line); }
 .zoom-readout button { width: 28px; height: 28px; border: 0; background: transparent; color: var(--accent); cursor: pointer; }
 .zoom-readout span { min-width: 52px; text-align: center; font-size: 9px; color: #809aa1; }
+.zoom-readout.sensor-zoom-in #zoom-in, .zoom-readout.sensor-zoom-out #zoom-out { color: #eaffff; background: rgba(var(--accent-rgb),.2); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb),.68), 0 0 18px rgba(var(--accent-rgb),.25); animation: sensor-zoom-prompt .7s ease-in-out infinite alternate; }
+@keyframes sensor-zoom-prompt { to { filter: brightness(1.45); } }
 .retask-hint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: #728b91; font-size: 8px; padding: 8px 14px; background: rgba(3,9,12,.82); border: 1px solid rgba(125,165,175,.13); pointer-events: none; }
 .retask-hint.attention { color: var(--accent); border-color: rgba(var(--accent-rgb), .55); animation: pulse 1s infinite; }
 .performance-hud { position: absolute; right: 18px; bottom: 18px; display: grid; grid-template-columns: repeat(5, auto); gap: 1px; background: rgba(2,8,12,.84); border: 1px solid rgba(var(--accent-rgb),.22); pointer-events: none; }
@@ -162,7 +164,7 @@ button { font: inherit; color: inherit; }
 .unit-heading small { color: var(--accent); font-size: 7px; white-space: nowrap; }
 .stat-line { height: 3px; background: rgba(140,170,175,.11); }
 .stat-line i { display: block; height: 100%; background: var(--good); }
-.unit-meta { display: grid; grid-template-columns: repeat(4,auto); justify-content: space-between; gap: 4px; color: #81979d; font-size: 7px; }
+.unit-meta { display: grid; grid-template-columns: repeat(3,auto); justify-content: space-between; gap: 6px; color: #81979d; font-size: 7px; }
 .unit-meta .reload-key { color: var(--accent); }
 .unit-order { align-self: end; color: #698188; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .unit-card.selected .unit-order { color: var(--accent); }

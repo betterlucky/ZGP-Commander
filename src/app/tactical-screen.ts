@@ -16,6 +16,8 @@ interface TacticalScreenOptions {
   demoMode?: boolean;
 }
 
+type DemoSensorStage = "zoom-in" | "zoom-out" | "settling" | "complete";
+
 const roleIcon: Record<Unit["role"], string> = {
   MEDIC: "+",
   SCAVENGER: "▣",
@@ -114,7 +116,7 @@ export const mountTacticalScreen = (
           <div class="viewport-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
-          ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>STEP 1 OF 3</small><span><b>Your whole squad is selected. Keep them together for now, or click a unit card to command someone independently.</b><em>Press F to breach the marked entry.</em></span></div>` : ""}
+          ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>GHOSTLINK SENSOR CHECK · 1/2</small><span><b>This is an unstable point-sensor reconstruction, not a camera feed.</b><em>Zoom all the way in to inspect the individual returns.</em></span></div>` : ""}
           <div class="runner-alert ${demoMode ? "with-guide" : ""}" id="runner-alert" role="alert"><small>FAST CONTACTS</small><b>RUNNER RUSH INCOMING</b><span>BRACE</span></div>
           <button class="viewport-extract-button" id="viewport-extract-button" type="button">CALL EXTRACTION · ALL STANDING SURVIVORS READY</button>
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
@@ -166,6 +168,12 @@ export const mountTacticalScreen = (
   let lastUnitCardsMarkup = "";
   let lastEventLogMarkup = "";
   let lastDemoGuideMarkup = "";
+  let demoSensorStage: DemoSensorStage = demoMode ? "zoom-in" : "complete";
+  let sensorCentered = !demoMode;
+  let sensorReturnTimer: number | null = null;
+  const pressedPanKeys = new Set<string>();
+  let panVelocityX = 0;
+  let panVelocityY = 0;
 
   const get = <T extends HTMLElement>(selector: string): T => {
     const element = root.querySelector<T>(selector);
@@ -192,7 +200,7 @@ export const mountTacticalScreen = (
       return `
         <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "reloading" ? "reloading" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
           <span class="unit-index">${unit.id}</span><span class="unit-silhouette role-${unit.role.toLowerCase()}"><i>${roleIcon[unit.role]}</i></span>
-          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role} · ${unit.weapon.toUpperCase()}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>AMMO ${unit.ammo}/${unit.maxAmmo}</span><span class="reload-key">R RELOAD</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
+          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role} · ${unit.weapon.toUpperCase()}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>AMMO ${unit.ammo}/${unit.maxAmmo}</span><span class="reload-key">R RELOAD</span></span><span class="unit-order">${order}</span></span>
           ${unit.state === "reloading" ? `<span class="reload-flag">RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S</span>` : ""}
         </button>
       `;
@@ -232,16 +240,26 @@ export const mountTacticalScreen = (
     get("#cache-copy").textContent = recovered === state.caches.length ? "All known caches recovered" : activeCache ? "Assigned scavenger transferring supplies; squad covering" : recovered ? "Extract now with partial salvage or continue" : state.breachOpen ? "Right-click a cache to assign the best scavenger" : "Breach, then recover any cache";
     get("#cache-progress").style.width = `${(activeCache?.progress ?? (recovered === state.caches.length ? 1 : 0)) * 100}%`;
     const demoGuide = root.querySelector<HTMLElement>("#demo-guide");
+    if (!sensorCentered && currentTransform()) {
+      sensorCentered = true;
+      centerOnUnit(simulation.state.units[0]);
+    }
     if (demoGuide) {
-      const markup = !state.breachOpen
-        ? `<small>STEP 1 OF 3</small><span><b>Your whole squad is selected. Keep them together for now, or click a unit card to command someone independently.</b><em>Press F to breach the marked entry.</em></span>`
-        : activeCache
-          ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><span><b>Cache transfer in progress.</b><em>The scavenger is exposed; the rest of the selected squad covers automatically.</em></span>`
-        : recovered === 0
-          ? `<small>STEP 2 OF 3</small><span><b>Right-click to move. Right-click a cache to start scavenging.</b><em>The best selected scavenger works while the rest of the squad covers.</em></span>`
-          : simulation.canExtract()
-            ? `<small>STEP 3 OF 3 · SQUAD READY</small><span><b>Click CALL EXTRACTION to bank the recovery.</b><em>Anything still in transit will arrive at the outpost after the mission.</em></span>`
-            : `<small>STEP 3 OF 3 · ${recovered}/${state.caches.length} SECURED</small><span><b>Right-click the marked landing zone to withdraw—or push deeper for more salvage.</b><em>Make sure every standing survivor comes home.</em></span>`;
+      const markup = demoSensorStage === "zoom-in"
+        ? `<small>GHOSTLINK SENSOR CHECK · 1/2</small><span><b>This is an unstable point-sensor reconstruction, not a camera feed.</b><em>Zoom all the way in to inspect the individual returns.</em></span>`
+        : demoSensorStage === "zoom-out"
+          ? `<small>GHOSTLINK SENSOR CHECK · 2/2</small><span><b>Every figure is assembled from drifting sensor returns.</b><em>Zoom all the way back out to see the tactical picture.</em></span>`
+          : demoSensorStage === "settling"
+            ? `<small>SENSOR CHECK COMPLETE</small><span><b>The reconstruction is imperfect, but it is enough to command through.</b><em>Returning to command scale…</em></span>`
+            : !state.breachOpen
+              ? `<small>STEP 1 OF 3</small><span><b>Your whole squad is selected. Keep them together for now, or click a unit card to command someone independently.</b><em>Press F to breach the marked entry.</em></span>`
+              : activeCache
+                ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><span><b>Cache transfer in progress.</b><em>The scavenger is exposed; the rest of the selected squad covers automatically.</em></span>`
+                : recovered === 0
+                  ? `<small>STEP 2 OF 3</small><span><b>Right-click to move. Right-click a cache to start scavenging.</b><em>The best selected scavenger works while the rest of the squad covers.</em></span>`
+                  : simulation.canExtract()
+                    ? `<small>STEP 3 OF 3 · SQUAD READY</small><span><b>Click CALL EXTRACTION to bank the recovery.</b><em>Anything still in transit will arrive at the outpost after the mission.</em></span>`
+                    : `<small>STEP 3 OF 3 · ${recovered}/${state.caches.length} SECURED</small><span><b>Right-click the marked landing zone to withdraw—or push deeper for more salvage.</b><em>Make sure every standing survivor comes home.</em></span>`;
       if (lastDemoGuideMarkup !== markup) {
         lastDemoGuideMarkup = markup;
         demoGuide.innerHTML = markup;
@@ -249,6 +267,9 @@ export const mountTacticalScreen = (
     }
     get("#timecode").textContent = formatTime(state.elapsed);
     get("#zoom-value").textContent = `${Math.round(camera.zoom * 100)}%`;
+    const zoomReadout = get(".zoom-readout");
+    zoomReadout.classList.toggle("sensor-zoom-in", demoSensorStage === "zoom-in");
+    zoomReadout.classList.toggle("sensor-zoom-out", demoSensorStage === "zoom-out");
     const selected = state.units.filter((unit) => unit.selected).length;
     get("#selected-count").textContent = `${selected} UNIT${selected === 1 ? "" : "S"}`;
     get("#pause-button").textContent = state.paused && state.missionStatus === "active" ? "▶ RESUME" : "Ⅱ PAUSE";
@@ -331,6 +352,20 @@ export const mountTacticalScreen = (
     lastRunnerRushSequence = state.runnerRushSequence;
   };
 
+  const updateCameraInput = (dt: number): void => {
+    const horizontal = Number(pressedPanKeys.has("a") || pressedPanKeys.has("arrowleft")) - Number(pressedPanKeys.has("d") || pressedPanKeys.has("arrowright"));
+    const vertical = Number(pressedPanKeys.has("w") || pressedPanKeys.has("arrowup")) - Number(pressedPanKeys.has("s") || pressedPanKeys.has("arrowdown"));
+    const targetX = horizontal * 470;
+    const targetY = vertical * 470;
+    const response = 1 - Math.exp(-dt * (horizontal || vertical ? 13 : 18));
+    panVelocityX += (targetX - panVelocityX) * response;
+    panVelocityY += (targetY - panVelocityY) * response;
+    if (!horizontal && Math.abs(panVelocityX) < 0.5) panVelocityX = 0;
+    if (!vertical && Math.abs(panVelocityY) < 0.5) panVelocityY = 0;
+    camera.panX += panVelocityX * dt;
+    camera.panY += panVelocityY * dt;
+  };
+
   const updateCameraTransition = (now: number): void => {
     if (!cameraTransition) return;
     const progress = Math.min(1, (now - cameraTransition.startedAt) / cameraTransition.duration);
@@ -346,6 +381,7 @@ export const mountTacticalScreen = (
     const dt = Math.max(0, Math.min((now - lastFrame) / 1000, .06));
     lastFrame = now;
     lastRender = now;
+    updateCameraInput(dt);
     updateCameraTransition(now);
     if (pixelRatio !== Math.min(window.devicePixelRatio || 1, 2)) resizeCanvas();
     if (benchmarkMode && gpuLidar.available) simulation.updateBenchmark(dt);
@@ -400,11 +436,29 @@ export const mountTacticalScreen = (
     const movedPoint = nextTransform.toScreen(displayPoint);
     camera.panX += screenPoint.x - movedPoint.x;
     camera.panY += screenPoint.y - movedPoint.y;
+    if (demoSensorStage === "zoom-in" && camera.zoom >= 3.39) {
+      demoSensorStage = "zoom-out";
+      lastDemoGuideMarkup = "";
+    } else if (demoSensorStage === "zoom-out" && camera.zoom <= 0.63) {
+      demoSensorStage = "settling";
+      lastDemoGuideMarkup = "";
+      if (sensorReturnTimer !== null) window.clearTimeout(sensorReturnTimer);
+      sensorReturnTimer = window.setTimeout(() => {
+        if (demoSensorStage !== "settling") return;
+        demoSensorStage = "complete";
+        sensorReturnTimer = null;
+        zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, 0.94);
+        lastDemoGuideMarkup = "";
+        updateUI();
+      }, 900);
+    }
   };
 
   const centerOnUnit = (unit: Unit): void => {
     const point = unitScreenPoint(unit);
     if (!point) return;
+    panVelocityX = 0;
+    panVelocityY = 0;
     cameraTransition = {
       startX: camera.panX,
       startY: camera.panY,
@@ -435,6 +489,8 @@ export const mountTacticalScreen = (
     } else if (event.button === 1) {
       event.preventDefault();
       cameraTransition = null;
+      panVelocityX = 0;
+      panVelocityY = 0;
       panDrag = { start: canvasPoint(event), panX: camera.panX, panY: camera.panY };
       canvas.setPointerCapture(event.pointerId);
       canvas.classList.add("panning");
@@ -516,6 +572,11 @@ export const mountTacticalScreen = (
     tacticalAudio.resume();
     if (event.key === " ") { event.preventDefault(); simulation.togglePause(); }
     else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); simulation.selectAll(); }
+    else if (["a", "d", "w", "s", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(event.key.toLowerCase())) {
+      event.preventDefault();
+      cameraTransition = null;
+      pressedPanKeys.add(event.key.toLowerCase());
+    }
     else if (event.key.toLowerCase() === "h") simulation.issueHold();
     else if (event.key.toLowerCase() === "r") simulation.issueReload();
     else if (event.key.toLowerCase() === "f") showHint(simulation.issueBreach() ? "ENTRY BREACH OPEN" : simulation.state.breachOpen ? "ENTRY ALREADY OPEN" : "SELECT A SURVIVOR AT THE BREACH", !simulation.state.breachOpen);
@@ -523,16 +584,16 @@ export const mountTacticalScreen = (
       const unit = simulation.state.units.find((candidate) => candidate.id === Number(event.key));
       if (unit) { simulation.selectUnit(unit.id); centerOnUnit(unit); }
     }
-    else if (event.key.toLowerCase() === "a") { cameraTransition = null; camera.panX += 42; }
-    else if (event.key.toLowerCase() === "d") { cameraTransition = null; camera.panX -= 42; }
-    else if (event.key.toLowerCase() === "w") { cameraTransition = null; camera.panY += 42; }
-    else if (event.key.toLowerCase() === "s") { cameraTransition = null; camera.panY -= 42; }
-    else if (event.key === "ArrowLeft") { cameraTransition = null; camera.panX += 42; }
-    else if (event.key === "ArrowRight") { cameraTransition = null; camera.panX -= 42; }
-    else if (event.key === "ArrowUp") { cameraTransition = null; camera.panY += 42; }
-    else if (event.key === "ArrowDown") { cameraTransition = null; camera.panY -= 42; }
     else if (event.key === "+" || event.key === "=") zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom * 1.18);
     else if (event.key === "-") zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom / 1.18);
+  };
+
+  const keyUpHandler = (event: KeyboardEvent): void => {
+    pressedPanKeys.delete(event.key.toLowerCase());
+  };
+
+  const blurHandler = (): void => {
+    pressedPanKeys.clear();
   };
 
   get<HTMLButtonElement>("#pause-button").addEventListener("click", () => simulation.togglePause());
@@ -556,6 +617,8 @@ export const mountTacticalScreen = (
   canvas.addEventListener("contextmenu", contextMenuHandler);
   canvas.addEventListener("wheel", wheelHandler, { passive: false });
   window.addEventListener("keydown", keyHandler);
+  window.addEventListener("keyup", keyUpHandler);
+  window.addEventListener("blur", blurHandler);
   root.addEventListener("pointerdown", resumeAudio);
   const resizeObserver = new ResizeObserver(resizeCanvas);
   resizeObserver.observe(canvas);
@@ -568,9 +631,12 @@ export const mountTacticalScreen = (
 
   return () => {
     cancelAnimationFrame(animationFrame);
+    if (sensorReturnTimer !== null) window.clearTimeout(sensorReturnTimer);
     gpuLidar.dispose();
     resizeObserver.disconnect();
     window.removeEventListener("keydown", keyHandler);
+    window.removeEventListener("keyup", keyUpHandler);
+    window.removeEventListener("blur", blurHandler);
     root.removeEventListener("pointerdown", resumeAudio);
     canvas.removeEventListener("pointerdown", pointerDownHandler);
     canvas.removeEventListener("pointermove", pointerMoveHandler);

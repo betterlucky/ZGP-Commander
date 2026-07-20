@@ -17,7 +17,7 @@ export interface IsoTransform {
   toWorld(point: Vec2): Vec2;
 }
 
-export const selectedSquadCluster = (units: Unit[], maximumDiameter = 4.8): Unit[] | null => {
+export const selectedSquadCluster = (units: Unit[], maximumDiameter = 7.2): Unit[] | null => {
   const selected = units.filter((unit) => unit.selected && unit.state !== "down");
   if (selected.length < 3) return null;
   const maximumDistanceSquared = maximumDiameter * maximumDiameter;
