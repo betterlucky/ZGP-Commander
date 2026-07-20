@@ -1,6 +1,6 @@
 import { clamp, hashNoise, mulberry32 } from "../math";
 import type { Camera, Contact, Prop, SimulationState, Unit, Vec2 } from "../types";
-import { makeIsoTransform, type IsoTransform } from "./shared";
+import { makeIsoTransform, selectedSquadCluster, type IsoTransform } from "./shared";
 
 interface Point3 {
   x: number;
@@ -208,10 +208,25 @@ export class LidarRenderer {
 
   private drawUnits(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
     const sorted = [...state.units].sort((a, b) => Number(a.selected) - Number(b.selected) || a.pos.x + a.pos.y - (b.pos.x + b.pos.y));
-    for (const unit of sorted) this.drawUnit(ctx, unit, state, transform);
+    const squadCluster = selectedSquadCluster(state.units);
+    for (const unit of sorted) this.drawUnit(ctx, unit, state, transform, !unit.selected || (!!squadCluster && unit.selected));
+    if (squadCluster) this.drawSquadMarker(ctx, squadCluster, transform);
   }
 
-  private drawUnit(ctx: CanvasRenderingContext2D, unit: Unit, state: SimulationState, transform: IsoTransform): void {
+  private drawSquadMarker(ctx: CanvasRenderingContext2D, units: Unit[], transform: IsoTransform): void {
+    const centroid = units.reduce((sum, unit) => ({ x: sum.x + unit.pos.x, y: sum.y + unit.pos.y }), { x: 0, y: 0 });
+    centroid.x /= units.length;
+    centroid.y /= units.length;
+    const point = transform.toScreen(centroid, 5);
+    const label = `SQUAD · ${units.length} SELECTED`;
+    ctx.save(); ctx.font = "800 9px monospace"; ctx.textAlign = "center";
+    const width = Math.max(118, ctx.measureText(label).width + 20);
+    ctx.fillStyle = "rgba(2,11,14,.95)"; ctx.fillRect(point.x - width / 2, point.y - 12, width, 18);
+    ctx.strokeStyle = "rgba(104,239,255,.82)"; ctx.lineWidth = 1.2; ctx.strokeRect(point.x - width / 2, point.y - 12, width, 18);
+    ctx.fillStyle = "#9af2ff"; ctx.fillText(label, point.x, point.y + 1); ctx.restore();
+  }
+
+  private drawUnit(ctx: CanvasRenderingContext2D, unit: Unit, state: SimulationState, transform: IsoTransform, squadCompact = false): void {
     const gait = unit.state === "moving" ? Math.sin(unit.phase) * 0.35 : 0;
     const forward = { x: Math.cos(unit.facing), y: Math.sin(unit.facing) };
     const right = { x: -forward.y, y: forward.x };
@@ -284,8 +299,17 @@ export class LidarRenderer {
 
     const label = transform.toScreen(unit.pos, 2.45);
     ctx.save(); ctx.font = `700 ${Math.max(9, transform.tileW * 0.48)}px monospace`; ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(3,9,13,.88)"; ctx.fillRect(label.x - transform.tileW * 0.68, label.y - 12, transform.tileW * 1.36, 16);
-    ctx.fillStyle = unit.color; ctx.fillText(`${unit.id} ${unit.name}`, label.x, label.y); ctx.restore();
+    if (squadCompact) {
+      ctx.fillStyle = "rgba(2,11,14,.94)"; ctx.fillRect(label.x - 8, label.y - 11, 16, 16);
+      ctx.strokeStyle = "rgba(110,239,255,.88)"; ctx.strokeRect(label.x - 8, label.y - 11, 16, 16);
+      ctx.fillStyle = "#9af2ff"; ctx.fillText(`${unit.id}`, label.x, label.y + 1);
+    } else {
+      const text = `${unit.id} ${unit.name}`;
+      const width = Math.max(64, ctx.measureText(text).width + 12);
+      ctx.fillStyle = "rgba(3,9,13,.88)"; ctx.fillRect(label.x - width / 2, label.y - 12, width, 16);
+      ctx.fillStyle = unit.color; ctx.fillText(text, label.x, label.y);
+    }
+    ctx.restore();
 
     if (unit.state === "collecting") {
       const cache = state.caches.find((candidate) => candidate.id === unit.interaction);

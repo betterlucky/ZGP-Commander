@@ -160,16 +160,16 @@
 
 .deployment-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 28px; background: rgba(4,6,5,.76); backdrop-filter: blur(5px); }
 .deployment-dialog { width: min(1050px, 94vw); max-height: 90vh; display: grid; grid-template-rows: 62px auto minmax(180px,1fr) 76px; background: #11130f; border: 1px solid rgba(var(--base-warm-rgb),.48); box-shadow: 0 24px 90px #000; }
-.deployment-dialog > header { position: relative; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; border-bottom: 1px solid var(--base-line); }
-.deployment-dialog > header span { display: flex; flex-direction: column; gap: 5px; }
+.deployment-dialog > header { position: relative; display: grid; grid-template-columns: minmax(190px,220px) minmax(0,1fr) 36px; align-items: center; gap: 16px; padding: 0 18px; border-bottom: 1px solid var(--base-line); }
+.deployment-dialog > header > span { display: flex; flex-direction: column; gap: 5px; }
 .deployment-dialog > header small { color: var(--base-warm); font-size: 7px; }
 .deployment-dialog > header strong { color: #e1d9c4; font-size: 15px; }
-.deployment-dialog > header button { width: 36px; height: 36px; border: 1px solid var(--base-line); background: transparent; color: #8c8678; cursor: pointer; font-size: 19px; }
-.deployment-dialog > header button:disabled { opacity: .25; cursor: default; }
-.deployment-demo-guide { position: absolute; z-index: 2; left: 52%; top: 50%; width: min(620px, 64%); min-height: 42px; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 12px; padding: 7px 12px; border: 1px solid rgba(var(--base-warm-rgb),.42); background: rgba(21,24,18,.97); box-shadow: 0 8px 28px rgba(0,0,0,.48), inset 3px 0 var(--base-warm); }
+.deployment-dialog > header > button { width: 36px; height: 36px; border: 1px solid var(--base-line); background: transparent; color: #8c8678; cursor: pointer; font-size: 19px; }
+.deployment-dialog > header > button:disabled { opacity: .25; cursor: default; }
+.deployment-demo-guide { z-index: 2; width: 100%; min-width: 0; min-height: 42px; display: flex; align-items: center; gap: 12px; padding: 7px 12px; border: 1px solid rgba(var(--base-warm-rgb),.42); background: rgba(21,24,18,.97); box-shadow: 0 8px 28px rgba(0,0,0,.48), inset 3px 0 var(--base-warm); }
 .deployment-demo-guide small { flex: 0 0 auto; color: var(--base-warm) !important; font-size: 8px !important; letter-spacing: .1em; }
-.deployment-demo-guide b { flex: 1 1 auto; color: #d8cfba; font-size: 10px; line-height: 1.35; }
-.demo-continue { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid rgba(var(--base-warm-rgb),.62); background: rgba(var(--base-warm-rgb),.12); color: #f1c672; font-size: 8px; font-weight: 800; letter-spacing: .08em; cursor: pointer; animation: demo-establish-link .8s ease-in-out infinite alternate; }
+.deployment-demo-guide b { flex: 1 1 auto; min-width: 0; color: #d8cfba; font-size: 10px; line-height: 1.35; }
+.demo-continue { flex: 0 0 auto; width: auto; min-height: 30px; padding: 0 10px; border: 1px solid rgba(var(--base-warm-rgb),.62); background: rgba(var(--base-warm-rgb),.12); color: #f1c672; font-size: 8px; font-weight: 800; line-height: 1.2; letter-spacing: .08em; white-space: nowrap; cursor: pointer; animation: demo-establish-link .8s ease-in-out infinite alternate; }
 .demo-continue:hover { background: rgba(var(--base-warm-rgb),.26); }
 .demo-auto-deploy .deployment-roster { pointer-events: none; }
 .demo-auto-deploy .deployment-person { cursor: default; }

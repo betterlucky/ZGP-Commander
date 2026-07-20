@@ -192,7 +192,7 @@ export const mountTacticalScreen = (
       return `
         <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "reloading" ? "reloading" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
           <span class="unit-index">${unit.id}</span><span class="unit-silhouette role-${unit.role.toLowerCase()}"><i>${roleIcon[unit.role]}</i></span>
-          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>▥ ${unit.ammo}+${unit.reserveAmmo}</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
+          <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role} · ${unit.weapon.toUpperCase()}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>MAG ${unit.ammo}/${unit.maxAmmo}</span><span>RES ${unit.reserveAmmo}</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
           ${unit.state === "reloading" ? `<span class="reload-flag">RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S</span>` : ""}
         </button>
       `;
@@ -260,7 +260,7 @@ export const mountTacticalScreen = (
     runnerAlert.classList.toggle("warning", state.runnerRushStatus === "warning");
     runnerAlert.innerHTML = state.runnerRushStatus === "warning"
       ? `<small>FAST CONTACTS</small><b>RUNNER RUSH INCOMING</b><span>BRACE · ${Math.max(1, Math.ceil(state.runnerRushWarning))}</span>`
-      : `<small>FAST CONTACTS</small><b>RUNNER RUSH</b><span>HOLD THE LINE</span>`;
+      : `<small>FAST CONTACTS</small><b>RUNNER RUSH</b><span>${state.runnerRushRemaining > 0 ? `HOLD · ${Math.ceil(state.runnerRushRemaining)}S` : "CLEAR REMAINING"}</span>`;
     const extractReady = simulation.canExtract();
     get("#extraction-heading").textContent = extractReady ? "SQUAD IN EXTRACTION" : recovered ? "WITHDRAWAL AVAILABLE" : "EXTRACTION MARKED";
     get("#extraction-copy").textContent = recovered ? (extractReady ? "Standing survivors ready for pickup" : `Return to landing with ${recovered} recovered cache${recovered === 1 ? "" : "s"}`) : "Recover at least one cache before withdrawing";
@@ -290,12 +290,16 @@ export const mountTacticalScreen = (
     if (resolved) return;
     resolved = true;
     handlers.onResolve(outcome);
-    const showcaseComplete = demoMode && outcome.success;
+    const showcaseComplete = demoMode;
     const resultEyebrow = showcaseComplete ? "BUILD WEEK SHOWCASE COMPLETE" : "GHOSTLINK SESSION CLOSED";
-    const resultHeading = showcaseComplete ? "LINK CLOSED. THE CAMPAIGN CONTINUES." : outcome.success ? "OPERATION RESOLVED" : "OPERATION FAILED";
+    const resultHeading = showcaseComplete
+      ? outcome.success ? "LINK CLOSED. THE CAMPAIGN CONTINUES." : "LINK LOST. COMMAND CONTINUES."
+      : outcome.success ? "OPERATION RESOLVED" : "OPERATION FAILED";
     const operationSummary = `${outcome.cachesRecovered} of ${outcome.cacheCount} caches recovered${outcome.objectiveCompleted ? "; the site was cleared." : "; the squad withdrew with partial salvage."} ${outcome.downPersonIds.length ? `${outcome.downPersonIds.length} survivor${outcome.downPersonIds.length === 1 ? " was" : "s were"} down when the link closed.` : "All linked survivors remained standing."}`;
     const resultCopy = showcaseComplete
-      ? `${operationSummary} This concludes the guided mission. In the full campaign, survivors retain their injuries, ammunition, equipment and individual histories; salvage returns to the outpost, where you assign personnel and choose the next opportunity.`
+      ? outcome.success
+        ? `${operationSummary} This concludes the guided mission. In the full campaign, survivors retain their injuries, ammunition, equipment and individual histories; salvage returns to the outpost, where you assign personnel and choose the next opportunity.`
+        : `${operationSummary} The link was lost, but the campaign is larger than one operation. In the full game, the outpost records the casualties and command continues with the survivors left behind. This still concludes the guided mission—you can reset the showcase and try a different withdrawal decision.`
       : operationSummary;
     const result = document.createElement("section");
     result.className = `mission-result ${outcome.success ? "success" : "failure"}`;

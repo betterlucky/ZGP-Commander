@@ -41,6 +41,24 @@ describe("Tactical squad orders", () => {
     expect(byWeapon.shotgun.reloadDuration).toBeGreaterThan(byWeapon.smg.reloadDuration);
   });
 
+  it("automatically completes an empty-magazine reload when reserve ammunition remains", () => {
+    const simulation = new Simulation();
+    const unit = simulation.state.units[0];
+    simulation.state.contacts = [];
+    simulation.state.breachOpen = true;
+    simulation.state.map.breach.open = true;
+    unit.ammo = 0;
+    const reserveBefore = unit.reserveAmmo;
+
+    simulation.update(0.05);
+    expect(unit.state).toBe("reloading");
+    for (let index = 0; index < 50; index += 1) simulation.update(0.05);
+
+    expect(unit.state).toBe("holding");
+    expect(unit.ammo).toBe(unit.maxAmmo);
+    expect(unit.reserveAmmo).toBe(reserveBefore - unit.maxAmmo);
+  });
+
   it("does not begin scavenging from an ordinary move order", () => {
     const simulation = new Simulation();
     simulation.selectAll();
@@ -99,7 +117,7 @@ describe("Tactical squad orders", () => {
     expect(closest).toBeGreaterThan(12);
   });
 
-  it("makes runner contacts unmistakably faster but more fragile than walkers", () => {
+  it("makes runner contacts unmistakably faster and resistant to a single ordinary hit", () => {
     const simulation = new Simulation();
     const internals = simulation as unknown as {
       makeContact: (index: number, map: typeof simulation.state.map, units: typeof simulation.state.units, requireSafe: boolean, forcedKind: "walker" | "runner") => typeof simulation.state.contacts[number] | null;
@@ -110,9 +128,9 @@ describe("Tactical squad orders", () => {
     const walker = internals.makeContact(0, simulation.state.map, simulation.state.units, true, "walker");
 
     expect(runner?.kind).toBe("runner");
-    expect(runner?.speed).toBeGreaterThan(2.8);
-    expect(runner?.health).toBe(1);
-    expect(walker && runner ? runner.speed > walker.speed * 2.3 : false).toBe(true);
+    expect(runner?.speed).toBeGreaterThan(5.7);
+    expect(runner?.health).toBe(2);
+    expect(walker && runner ? runner.speed > walker.speed * 4.5 : false).toBe(true);
   });
 
   it("telegraphs one deterministic runner rush after the first guided-demo cache", () => {
@@ -147,7 +165,65 @@ describe("Tactical squad orders", () => {
     simulation.update(4.1);
 
     expect(simulation.state.runnerRushStatus).toBe("active");
-    expect(simulation.state.contacts.filter((contact) => contact.alive && contact.kind === "runner")).toHaveLength(5);
+    expect(simulation.state.runnerRushRemaining).toBe(15);
+    expect(simulation.state.contacts.filter((contact) => contact.alive && contact.kind === "runner")).toHaveLength(10);
+
+    const runnerIds = new Set(simulation.state.contacts.filter((contact) => contact.kind === "runner").map((contact) => contact.id));
+    const internals = simulation as unknown as { updateRunnerRush: (dt: number) => void; runnerWaveTimer: number };
+    internals.runnerWaveTimer = 0;
+    internals.updateRunnerRush(0.1);
+
+    expect(simulation.state.contacts.filter((contact) => contact.kind === "runner" && !runnerIds.has(contact.id))).toHaveLength(4);
+    expect(simulation.state.runnerRushRemaining).toBeCloseTo(14.9);
+  });
+
+  it("keeps walker reinforcements active during a runner rush", () => {
+    const simulation = new Simulation();
+    const internals = simulation as unknown as { spawnTimer: number; runnerWaveTimer: number };
+    simulation.state.breachOpen = true;
+    simulation.state.map.breach.open = true;
+    simulation.state.runnerRushStatus = "active";
+    simulation.state.runnerRushRemaining = 15;
+    internals.spawnTimer = 0;
+    internals.runnerWaveTimer = 99;
+    const walkersBefore = simulation.state.contacts.filter((contact) => contact.kind === "walker").length;
+
+    simulation.update(0.05);
+
+    expect(simulation.state.runnerRushStatus).toBe("active");
+    expect(simulation.state.contacts.filter((contact) => contact.kind === "walker").length).toBe(walkersBefore + 1);
+  });
+
+  it("lets a full holding squad break the guided rush while still risking damage", () => {
+    const template = new Simulation();
+    const simulation = new Simulation({
+      missionTitle: "Rush balance test",
+      objectiveLabel: "Hold",
+      riskLabel: "RECOVERABLE",
+      threat: 0.42,
+      cacheCount: 3,
+      guidedDemo: true,
+      units: template.state.units.map((unit) => ({
+        personId: unit.personId,
+        name: unit.name,
+        role: unit.role,
+        color: unit.color,
+        weapon: unit.weapon,
+        health: 100,
+        scavengeSkill: unit.scavengeSkill,
+      })),
+    });
+    simulation.selectAll();
+    expect(simulation.issueBreach()).toBe(true);
+    expect(simulation.issueScavenge(simulation.state.caches[0].id)).not.toBeNull();
+
+    for (let index = 0; index < 900; index += 1) simulation.update(0.05);
+
+    expect(simulation.state.runnerRushesTriggered).toBe(1);
+    expect(simulation.state.units.every((unit) => unit.state !== "down")).toBe(true);
+    expect(simulation.state.units.some((unit) => unit.health < 100)).toBe(true);
+    expect(Math.min(...simulation.state.units.map((unit) => unit.health))).toBeGreaterThanOrEqual(55);
+    expect(simulation.state.contactsNeutralised).toBeGreaterThanOrEqual(10);
   });
 
   it("never schedules more than two runner rushes in a campaign mission", () => {

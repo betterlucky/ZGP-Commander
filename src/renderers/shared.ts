@@ -1,4 +1,4 @@
-import type { Camera, FacilityMap, Vec2 } from "../types";
+import type { Camera, FacilityMap, Unit, Vec2 } from "../types";
 
 export interface TopDownTransform {
   scale: number;
@@ -16,6 +16,20 @@ export interface IsoTransform {
   toScreen(point: Vec2, z?: number): Vec2;
   toWorld(point: Vec2): Vec2;
 }
+
+export const selectedSquadCluster = (units: Unit[], maximumDiameter = 4.8): Unit[] | null => {
+  const selected = units.filter((unit) => unit.selected && unit.state !== "down");
+  if (selected.length < 3) return null;
+  const maximumDistanceSquared = maximumDiameter * maximumDiameter;
+  for (let first = 0; first < selected.length; first += 1) {
+    for (let second = first + 1; second < selected.length; second += 1) {
+      const dx = selected[first].pos.x - selected[second].pos.x;
+      const dy = selected[first].pos.y - selected[second].pos.y;
+      if (dx * dx + dy * dy > maximumDistanceSquared) return null;
+    }
+  }
+  return selected;
+};
 
 export const makeTopDownTransform = (
   width: number,

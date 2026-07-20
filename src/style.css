@@ -159,10 +159,10 @@ button { font: inherit; color: inherit; }
 .unit-info { min-width: 0; padding: 8px 8px 6px; display: grid; grid-template-rows: auto 4px auto auto; gap: 5px; }
 .unit-heading { display: flex; justify-content: space-between; align-items: baseline; }
 .unit-heading b { color: #d2dfe2; font-size: 12px; }
-.unit-heading small { color: var(--accent); font-size: 7px; }
+.unit-heading small { color: var(--accent); font-size: 7px; white-space: nowrap; }
 .stat-line { height: 3px; background: rgba(140,170,175,.11); }
 .stat-line i { display: block; height: 100%; background: var(--good); }
-.unit-meta { display: flex; justify-content: space-between; color: #81979d; font-size: 7px; }
+.unit-meta { display: grid; grid-template-columns: repeat(4,auto); justify-content: space-between; gap: 4px; color: #81979d; font-size: 7px; }
 .unit-order { align-self: end; color: #698188; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .unit-card.selected .unit-order { color: var(--accent); }
 .squad-summary { border-top: 1px solid var(--line); padding: 9px 4px; display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; }

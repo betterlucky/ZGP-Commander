@@ -146,6 +146,7 @@ export interface SimulationState {
   cacheSequence: number;
   runnerRushStatus: RunnerRushStatus;
   runnerRushWarning: number;
+  runnerRushRemaining: number;
   runnerRushSequence: number;
   runnerRushesTriggered: number;
   units: Unit[];

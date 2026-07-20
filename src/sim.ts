@@ -24,6 +24,7 @@ const weaponRange: Record<Unit["weapon"], number> = { rifle: 9, shotgun: 5.8, sm
 const roleSpeed: Record<Unit["role"], number> = { MEDIC: 3.45, SCAVENGER: 3.3, RANGER: 3.55, ENGINEER: 3.35 };
 const safeSpawnDistance = 16;
 const runnerRushWarningDuration = 4;
+const runnerRushDuration = 15;
 const maximumRunnerRushes = 2;
 
 export class Simulation {
@@ -32,6 +33,7 @@ export class Simulation {
   private nextContactId = 1;
   private spawnTimer = 1.5;
   private runnerRushCheckTimer = 18;
+  private runnerWaveTimer = 0;
   private random = mulberry32(423771);
   private cacheAnnounced = new Set<string>();
 
@@ -100,6 +102,7 @@ export class Simulation {
       cacheSequence: 0,
       runnerRushStatus: "idle",
       runnerRushWarning: 0,
+      runnerRushRemaining: 0,
       runnerRushSequence: 0,
       runnerRushesTriggered: 0,
       units,
@@ -137,11 +140,11 @@ export class Simulation {
       path: [],
       repath: this.random() * 0.8,
       facing: Math.PI,
-      speed: kind === "runner" ? 2.9 + this.random() * 0.55 : 0.72 + this.random() * 0.52,
+      speed: kind === "runner" ? 5.8 + this.random() * 1.1 : 0.72 + this.random() * 0.52,
       phase: this.random() * Math.PI * 2,
       heat: 0.7 + this.random() * 0.3,
       confidence: 0.45 + this.random() * 0.55,
-      health: kind === "runner" ? 1 : this.random() > 0.82 ? 2 : 1,
+      health: kind === "runner" ? 2 : this.random() > 0.82 ? 2 : 1,
       alive: true,
       hitFlash: 0,
       attackCooldown: this.random(),
@@ -157,6 +160,7 @@ export class Simulation {
     this.nextContactId = 1;
     this.spawnTimer = 1.5;
     this.runnerRushCheckTimer = 18;
+    this.runnerWaveTimer = 0;
     this.cacheAnnounced.clear();
     this.random = mulberry32(423771);
     this.state = this.createState();
@@ -302,8 +306,9 @@ export class Simulation {
 
     if (state.breachOpen) this.spawnTimer -= dt;
     const living = state.contacts.filter((contact) => contact.alive).length;
+    const livingWalkers = state.contacts.filter((contact) => contact.alive && contact.kind === "walker").length;
     const contactLimit = 16 + Math.round(state.threat * 18);
-    if (state.breachOpen && state.runnerRushStatus === "idle" && this.spawnTimer <= 0 && living < contactLimit) {
+    if (state.breachOpen && this.spawnTimer <= 0 && livingWalkers < contactLimit) {
       const newcomer = this.makeContact(Math.floor(this.random() * state.map.contactSpawns.length), state.map, state.units, true);
       if (newcomer) {
         state.contacts.push(newcomer);
@@ -510,10 +515,25 @@ export class Simulation {
     if (this.state.runnerRushStatus !== "idle" || this.state.runnerRushesTriggered >= maximumRunnerRushes) return;
     this.state.runnerRushStatus = "warning";
     this.state.runnerRushWarning = runnerRushWarningDuration;
+    this.state.runnerRushRemaining = 0;
     this.state.runnerRushSequence += 1;
     this.state.runnerRushesTriggered += 1;
-    this.spawnTimer = Math.max(this.spawnTimer, runnerRushWarningDuration + 2);
     this.pushEvent("SENSOR", "RUNNER RUSH INCOMING. Brace and hold.", "warning");
+  }
+
+  private spawnRunnerWave(opening: boolean): number {
+    const state = this.state;
+    const waveSize = this.setup.guidedDemo
+      ? opening ? 10 : 4
+      : opening ? 8 + Math.floor(this.random() * 4) : 3 + Math.floor(this.random() * 3);
+    let spawned = 0;
+    for (let index = 0; index < waveSize; index += 1) {
+      const runner = this.makeContact(index + state.contacts.length, state.map, state.units, true, "runner");
+      if (!runner) continue;
+      state.contacts.push(runner);
+      spawned += 1;
+    }
+    return spawned;
   }
 
   private updateRunnerRush(dt: number): void {
@@ -522,23 +542,28 @@ export class Simulation {
     if (state.runnerRushStatus === "warning") {
       state.runnerRushWarning = Math.max(0, state.runnerRushWarning - dt);
       if (state.runnerRushWarning > 0) return;
-      const waveSize = this.setup.guidedDemo ? 5 : 4 + Math.floor(this.random() * 3);
-      let spawned = 0;
-      for (let index = 0; index < waveSize; index += 1) {
-        const runner = this.makeContact(index, state.map, state.units, true, "runner");
-        if (!runner) continue;
-        state.contacts.push(runner);
-        spawned += 1;
-      }
+      const spawned = this.spawnRunnerWave(true);
       state.runnerRushStatus = spawned ? "active" : "idle";
+      state.runnerRushRemaining = spawned ? runnerRushDuration : 0;
+      this.runnerWaveTimer = 3 + this.random() * 2;
       this.runnerRushCheckTimer = 30 + this.random() * 20;
-      this.pushEvent("SENSOR", spawned ? `${spawned} runners entering at speed. Hold the line.` : "Runner approach lost beyond sensor range.", "warning");
+      this.pushEvent("SENSOR", spawned ? `${spawned} runners entering at speed. Fresh contacts expected for fifteen seconds.` : "Runner approach lost beyond sensor range.", "warning");
       return;
     }
     if (state.runnerRushStatus === "active") {
+      state.runnerRushRemaining = Math.max(0, state.runnerRushRemaining - dt);
+      if (state.runnerRushRemaining > 0) {
+        this.runnerWaveTimer -= dt;
+        if (this.runnerWaveTimer <= 0) {
+          const spawned = this.spawnRunnerWave(false);
+          this.runnerWaveTimer = spawned ? 3 + this.random() * 2 : 1;
+          if (spawned) this.pushEvent("SENSOR", `${spawned} fresh runners crossing the perimeter.`, "warning");
+        }
+        return;
+      }
       if (state.contacts.some((contact) => contact.alive && contact.kind === "runner")) return;
       state.runnerRushStatus = "idle";
-      this.spawnTimer = Math.max(this.spawnTimer, 3.5);
+      state.runnerRushRemaining = 0;
       this.pushEvent("SENSOR", "Runner rush broken. Normal contact pattern resuming.", "good");
       return;
     }

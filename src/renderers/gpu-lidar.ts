@@ -1,6 +1,6 @@
 import { hashNoise, mulberry32 } from "../math";
 import type { Camera, FacilityMap, Prop, SimulationState, Unit, Vec2 } from "../types";
-import { makeIsoTransform, type IsoTransform } from "./shared";
+import { makeIsoTransform, selectedSquadCluster, type IsoTransform } from "./shared";
 
 const STRIDE_FLOATS = 8;
 const QUADRANTS = 2;
@@ -348,8 +348,10 @@ export class GpuLidarRenderer {
     this.drawObjectives(ctx, state, transform);
     this.labelBounds.length = 0;
     this.drawRunnerMarkers(ctx, state, transform);
-    for (const unit of state.units) if (!unit.selected) this.drawUnitOverlay(ctx, unit, state, transform, this.labelBounds);
-    for (const unit of state.units) if (unit.selected) this.drawUnitOverlay(ctx, unit, state, transform, this.labelBounds);
+    const squadCluster = selectedSquadCluster(state.units);
+    for (const unit of state.units) if (!unit.selected) this.drawUnitOverlay(ctx, unit, state, transform, this.labelBounds, true);
+    for (const unit of state.units) if (unit.selected) this.drawUnitOverlay(ctx, unit, state, transform, this.labelBounds, !!squadCluster);
+    if (squadCluster) this.drawSquadMarker(ctx, squadCluster, transform);
     this.drawScanOverlay(ctx, width, height, state);
   }
 
@@ -724,7 +726,27 @@ export class GpuLidarRenderer {
     ctx.restore();
   }
 
-  private drawUnitOverlay(ctx: CanvasRenderingContext2D, unit: Unit, state: SimulationState, transform: IsoTransform, labels: Array<{ left: number; top: number; right: number; bottom: number }>): void {
+  private drawSquadMarker(ctx: CanvasRenderingContext2D, units: Unit[], transform: IsoTransform): void {
+    const centroid = units.reduce((sum, unit) => ({ x: sum.x + unit.pos.x, y: sum.y + unit.pos.y }), { x: 0, y: 0 });
+    centroid.x /= units.length;
+    centroid.y /= units.length;
+    const point = transform.toScreen(this.offsetPoint(centroid), 5);
+    const label = `SQUAD · ${units.length} SELECTED`;
+    ctx.save();
+    ctx.font = "800 9px monospace";
+    const width = Math.max(118, ctx.measureText(label).width + 20);
+    ctx.fillStyle = "rgba(2,11,14,.95)";
+    ctx.fillRect(point.x - width / 2, point.y - 12, width, 18);
+    ctx.strokeStyle = "rgba(104,239,255,.82)";
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(point.x - width / 2, point.y - 12, width, 18);
+    ctx.fillStyle = "#9af2ff";
+    ctx.textAlign = "center";
+    ctx.fillText(label, point.x, point.y + 1);
+    ctx.restore();
+  }
+
+  private drawUnitOverlay(ctx: CanvasRenderingContext2D, unit: Unit, state: SimulationState, transform: IsoTransform, labels: Array<{ left: number; top: number; right: number; bottom: number }>, squadCompact = false): void {
     const point = transform.toScreen(this.offsetPoint(unit.pos), 2.45);
     const ground = transform.toScreen(this.offsetPoint(unit.pos), 0.02);
     ctx.save();
@@ -741,30 +763,38 @@ export class GpuLidarRenderer {
       ctx.fillText(`RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S`, ground.x, ground.y + 22);
       ctx.shadowBlur = 0;
     }
-    const label = `${unit.id}  ${unit.name}  ·  ${unit.role}`;
+    const label = `${unit.id}  ${unit.name}`;
     ctx.font = "700 9px monospace";
     let width = this.labelWidths.get(unit.id);
     if (width === undefined) {
       width = Math.max(82, ctx.measureText(label).width + 12);
       this.labelWidths.set(unit.id, width);
     }
-    let labelY = point.y;
+    const labelY = point.y;
     const scavenging = unit.state === "collecting" && !!unit.interaction;
     let bounds = { left: point.x - width / 2, top: labelY - (scavenging ? 28 : 11), right: point.x + width / 2, bottom: labelY + 4 };
-    while (labels.some((other) => bounds.left < other.right && bounds.right > other.left && bounds.top < other.bottom && bounds.bottom > other.top)) {
-      labelY -= 17;
-      bounds = { ...bounds, top: labelY - (scavenging ? 28 : 11), bottom: labelY + 4 };
+    if (squadCompact) {
+      const markerSize = 16;
+      bounds = { left: point.x - markerSize / 2, top: labelY - 11, right: point.x + markerSize / 2, bottom: labelY + 5 };
+      ctx.fillStyle = "rgba(2,11,14,.94)"; ctx.fillRect(bounds.left, bounds.top, markerSize, markerSize);
+      ctx.strokeStyle = "rgba(110,239,255,.88)"; ctx.strokeRect(bounds.left, bounds.top, markerSize, markerSize);
+      ctx.fillStyle = "#9af2ff"; ctx.textAlign = "center"; ctx.fillText(`${unit.id}`, point.x, labelY + 1);
+    } else {
+      while (labels.some((other) => bounds.left < other.right && bounds.right > other.left && bounds.top < other.bottom && bounds.bottom > other.top)) {
+        bounds = { ...bounds, top: bounds.top - 17, bottom: bounds.bottom - 17 };
+      }
+      const adjustedY = bounds.bottom - 4;
+      labels.push(bounds);
+      ctx.fillStyle = "rgba(2,8,12,.92)"; ctx.fillRect(bounds.left, adjustedY - 11, width, 15);
+      ctx.strokeStyle = unit.selected ? "rgba(110,239,255,.9)" : "rgba(95,225,250,.36)"; ctx.strokeRect(bounds.left, adjustedY - 11, width, 15);
+      ctx.fillStyle = "#83ecff"; ctx.textAlign = "center"; ctx.fillText(label, point.x, adjustedY);
     }
-    labels.push(bounds);
-    ctx.fillStyle = "rgba(2,8,12,.92)"; ctx.fillRect(bounds.left, labelY - 11, width, 15);
-    ctx.strokeStyle = unit.selected ? "rgba(110,239,255,.9)" : "rgba(95,225,250,.36)"; ctx.strokeRect(bounds.left, labelY - 11, width, 15);
-    ctx.fillStyle = "#83ecff"; ctx.textAlign = "center"; ctx.fillText(label, point.x, labelY);
     if (scavenging) {
       const cache = state.caches.find((candidate) => candidate.id === unit.interaction);
       const progress = cache?.progress ?? 0;
       const barWidth = Math.max(82, width);
       const barX = point.x - barWidth / 2;
-      const barY = labelY - 27;
+      const barY = bounds.top - 16;
       ctx.fillStyle = "rgba(30,18,3,.94)"; ctx.fillRect(barX, barY, barWidth, 12);
       ctx.strokeStyle = "rgba(255,193,76,.82)"; ctx.strokeRect(barX, barY, barWidth, 12);
       ctx.fillStyle = "rgba(255,179,49,.34)"; ctx.fillRect(barX + 1, barY + 1, (barWidth - 2) * progress, 10);

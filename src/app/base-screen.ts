@@ -18,6 +18,7 @@ type DemoDeploymentStage = "idle" | "roster" | "selecting" | "linking";
 type FacilityId = "operations" | "medical" | "workshop" | "logistics" | "quarters" | "records";
 const demoRosterHoldMs = 975;
 const demoSelectionHoldMs = 1725;
+const demoFinalSelectionHoldMs = 3000;
 
 const facilityDetails: Record<Exclude<FacilityId, "quarters">, { code: string; title: string; summary: string; features: string[] }> = {
   operations: {
@@ -316,14 +317,15 @@ export const mountBaseScreen = (
     demoSelectedPersonId = person.id;
     selectedPeople.add(person.id);
     render();
+    const finalSelection = selectedPeople.size >= team.length;
     window.setTimeout(() => {
       if (sequenceVersion !== demoSequenceVersion || demoDeploymentStage !== "selecting") return;
-      if (selectedPeople.size >= team.length) {
+      if (finalSelection) {
         demoDeploymentStage = "linking";
         demoSelectedPersonId = null;
       } else demoContinueReady = true;
       render();
-    }, demoSelectionHoldMs);
+    }, finalSelection ? demoFinalSelectionHoldMs : demoSelectionHoldMs);
   };
 
   const bindEvents = (selectedOffer: MissionOffer | null): void => {
