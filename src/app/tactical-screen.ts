@@ -570,7 +570,13 @@ export const mountTacticalScreen = (
 
   const keyHandler = (event: KeyboardEvent): void => {
     tacticalAudio.resume();
-    if (event.key === " ") { event.preventDefault(); simulation.togglePause(); }
+    if (event.code === "Space") {
+      event.preventDefault();
+      // Space advances the guided deployment before this screen mounts. Keep
+      // it reserved throughout the demo so that the same press—or a held-key
+      // repeat—cannot freeze the sensor lesson as the tactical view appears.
+      if (!demoMode) simulation.togglePause();
+    }
     else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); simulation.selectAll(); }
     else if (["a", "d", "w", "s", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(event.key.toLowerCase())) {
       event.preventDefault();

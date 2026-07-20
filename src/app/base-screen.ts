@@ -339,6 +339,7 @@ export const mountBaseScreen = (
     root.querySelector<HTMLElement>(".deployment-overlay")?.addEventListener("keydown", (event) => {
       if (event.code !== "Space" || !demoContinueReady || demoDeploymentStage === "linking") return;
       event.preventDefault();
+      event.stopPropagation();
       continueDemo();
     });
     root.querySelectorAll<HTMLButtonElement>("[data-offer]").forEach((button) => {
