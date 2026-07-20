@@ -14,6 +14,8 @@ interface BaseScreenOptions {
   onDemoStarted?(): void;
 }
 
+type DemoDeploymentStage = "idle" | "roster" | "selecting" | "linking";
+
 const assignmentLabels: Record<BaseAssignment, string> = {
   general: "General duty",
   workshop: "Workshop",
@@ -63,6 +65,9 @@ export const mountBaseScreen = (
   let selectedOfferId: string | null = null;
   const selectedPeople = new Set<string>();
   let demoIntroVisible = options.showDemoIntro ?? false;
+  let demoDeploymentStage: DemoDeploymentStage = "idle";
+  let demoSelectedPersonId: string | null = null;
+  let demoSequenceVersion = 0;
   let notice = options.demoMode && campaign.state.operations.some((operation) => operation.status === "resolved")
     ? "Demo operation complete. Review the returned squad, field resources in transit and command log—or restart the showcase."
     : "Select an operation when you are ready. Base assignments remain provisional until the day ends.";
@@ -85,9 +90,9 @@ export const mountBaseScreen = (
           <div class="base-brand"><span>HOLDFAST</span><small>${options.demoMode ? "BUILD WEEK DEMO" : "OUTPOST COMMAND"}</small></div>
           <div class="cycle-readout"><small>OPERATIONAL CYCLE</small><strong>DAY ${state.day}</strong></div>
           <div class="resource-strip">
-            <span><small>AMMUNITION</small><b>${state.resources.ammunition}${state.transit.ammunition ? `<i>+${state.transit.ammunition} TRANSIT</i>` : ""}</b></span>
-            <span><small>MEDICAL</small><b>${state.resources.medical}${state.transit.medical ? `<i>+${state.transit.medical} TRANSIT</i>` : ""}</b></span>
-            <span><small>MATERIALS</small><b>${state.resources.materials}${state.transit.materials ? `<i>+${state.transit.materials} TRANSIT</i>` : ""}</b></span>
+            <span><small>AMMUNITION</small><b>${state.resources.ammunition}${state.transit.ammunition ? `<i>IN TRANSIT +${state.transit.ammunition}</i>` : ""}</b></span>
+            <span><small>MEDICAL</small><b>${state.resources.medical}${state.transit.medical ? `<i>IN TRANSIT +${state.transit.medical}</i>` : ""}</b></span>
+            <span><small>MATERIALS</small><b>${state.resources.materials}${state.transit.materials ? `<i>IN TRANSIT +${state.transit.materials}</i>` : ""}</b></span>
             <span><small>SUPPORT</small><b>${active.length} / ${state.supportCapacity}</b></span>
           </div>
           <button class="warm-button" id="end-day" type="button">END DAY ${state.day}</button>
@@ -169,12 +174,65 @@ export const mountBaseScreen = (
           ${state.events.slice(0, 4).map((event) => `<p class="${event.tone}"><b>DAY ${event.day}</b>${escapeHtml(event.message)}</p>`).join("")}
         </footer>
 
-        ${selectedOffer ? renderDeploymentPlanner(selectedOffer, available, selectedPeople, state.resources.ammunition) : ""}
+        ${selectedOffer ? renderDeploymentPlanner(
+          selectedOffer,
+          available,
+          selectedPeople,
+          state.resources.ammunition,
+          demoDeploymentStage,
+          demoSelectedPersonId,
+          active.length,
+        ) : ""}
         ${demoIntroVisible ? renderDemoIntro() : ""}
       </main>
     `;
 
     bindEvents(selectedOffer);
+  };
+
+  const launchOperation = (offer: MissionOffer): void => {
+    try {
+      const deployment = campaign.deploy(offer.id, [...selectedPeople]);
+      store.save(campaign);
+      handlers.onLaunch(deployment);
+    } catch (error) {
+      demoDeploymentStage = "idle";
+      notice = error instanceof Error ? error.message : "Deployment failed.";
+      render();
+    }
+  };
+
+  const runDemoDeploymentSequence = (offer: MissionOffer): void => {
+    const team = campaign.availablePeople().slice(0, offer.protocolSquad);
+    const sequenceVersion = ++demoSequenceVersion;
+    const queueStep = (delay: number, step: () => void): void => {
+      window.setTimeout(() => {
+        if (sequenceVersion !== demoSequenceVersion) return;
+        step();
+      }, delay);
+    };
+
+    demoDeploymentStage = "roster";
+    demoSelectedPersonId = null;
+    selectedPeople.clear();
+    render();
+
+    let delay = 1400;
+    for (const person of team) {
+      queueStep(delay, () => {
+        demoDeploymentStage = "selecting";
+        demoSelectedPersonId = person.id;
+        selectedPeople.add(person.id);
+        render();
+      });
+      delay += 400;
+    }
+    queueStep(delay + 350, () => {
+      demoDeploymentStage = "linking";
+      demoSelectedPersonId = null;
+      render();
+    });
+    queueStep(delay + 1100, () => launchOperation(offer));
   };
 
   const bindEvents = (selectedOffer: MissionOffer | null): void => {
@@ -216,21 +274,11 @@ export const mountBaseScreen = (
       demoIntroVisible = false;
       options.onDemoStarted?.();
       selectedOfferId = offer.id;
-      selectedPeople.clear();
-      for (const person of campaign.availablePeople().slice(0, offer.protocolSquad)) selectedPeople.add(person.id);
-      render();
-      root.querySelector<HTMLButtonElement>("#launch-operation")?.focus();
+      runDemoDeploymentSequence(offer);
     });
     root.querySelector<HTMLButtonElement>("#launch-operation")?.addEventListener("click", () => {
       if (!selectedOffer) return;
-      try {
-        const deployment = campaign.deploy(selectedOffer.id, [...selectedPeople]);
-        store.save(campaign);
-        handlers.onLaunch(deployment);
-      } catch (error) {
-        notice = error instanceof Error ? error.message : "Deployment failed.";
-        render();
-      }
+      launchOperation(selectedOffer);
     });
     root.querySelector<HTMLButtonElement>("#end-day")?.addEventListener("click", () => {
       try {
@@ -267,8 +315,8 @@ const renderDemoIntro = (): string => `
   <section class="demo-intro" aria-labelledby="demo-title">
     <div class="demo-intro-card">
       <small>OPENAI BUILD WEEK · PLAYABLE SHOWCASE</small>
-      <h1 id="demo-title">COMMAND THE LINK.<br><span>LIVE WITH WHO RETURNS.</span></h1>
-      <p>ZGP Commander is an order-based squad tactics game seen through an incomplete remote sensor reconstruction. Combat is automatic; your decisions are who to risk, where to hold, how much to salvage and when to leave.</p>
+      <h1 id="demo-title">COMMAND THE LINK.<br><span>LIVE WITH THE CONSEQUENCES.</span></h1>
+      <p>ZGP Commander is a squad tactics game played through an incomplete remote sensor reconstruction. Combat is automatic but you give the orders; those decisions will be who to risk, where to hold, how much to salvage and when to leave.</p>
       <ol>
         <li><b>Deploy</b><span>A balanced four-person squad is ready.</span></li>
         <li><b>Recover</b><span>Breach the site and secure at least one cache.</span></li>
@@ -288,16 +336,26 @@ const renderDeploymentPlanner = (
   available: PersonRecord[],
   selectedPeople: Set<string>,
   availableAmmo: number,
+  demoStage: DemoDeploymentStage = "idle",
+  demoSelectedPersonId: string | null = null,
+  rosterSize = available.length,
 ): string => {
   const selected = available.filter((person) => selectedPeople.has(person.id));
   const ammoCost = selected.reduce((total, person) => total + deploymentAmmoCost(offer, person), 0);
   const missionProtocol = offer.kind === "rescue" ? "rescue" : offer.kind;
   const difference = selected.length - offer.protocolSquad;
   const squadProtocol = `Standard protocol suggests a team of ${offer.protocolSquad} for ${missionProtocol} missions. ${difference === 0 ? "Protocol strength selected." : difference < 0 ? `${Math.abs(difference)} fewer currently selected.` : `${difference} additional currently selected.`}`;
+  const demoGuide = demoStage === "roster"
+    ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>YOUR ROSTER</small><b>This is your roster. You currently have ${rosterSize} survivors, but for this mission we're taking out a team of ${offer.protocolSquad}.</b></div>`
+    : demoStage === "selecting"
+      ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>SELECTING TEAM · ${selected.length}/${offer.protocolSquad}</small><b>A balanced team is being assigned to the mission.</b></div>`
+      : demoStage === "linking"
+        ? `<div class="deployment-demo-guide" role="status" aria-live="polite"><small>TEAM READY</small><b>${selected.length} survivors selected. Establishing the link.</b></div>`
+        : "";
   return `
     <section class="deployment-overlay">
-      <div class="deployment-dialog">
-        <header><span><small>ROLLING DEPLOYMENT</small><strong>${escapeHtml(offer.title)}</strong></span><button id="close-planner" type="button">×</button></header>
+      <div class="deployment-dialog ${demoStage !== "idle" ? `demo-auto-deploy stage-${demoStage}` : ""}">
+        <header><span><small>ROLLING DEPLOYMENT</small><strong>${escapeHtml(offer.title)}</strong></span>${demoGuide}<button id="close-planner" type="button" ${demoStage !== "idle" ? "disabled" : ""}>×</button></header>
         <div class="deployment-brief">
           <span><small>LOCATION</small><b>${escapeHtml(offer.location)}</b></span>
           <span><small>OBJECTIVE</small><b>${escapeHtml(offer.objective)}</b></span>
@@ -306,7 +364,7 @@ const renderDeploymentPlanner = (
         </div>
         <div class="deployment-roster">
           ${available.map((person) => `
-            <button class="deployment-person ${selectedPeople.has(person.id) ? "selected" : ""}" data-person="${person.id}" type="button" aria-pressed="${selectedPeople.has(person.id)}">
+            <button class="deployment-person ${selectedPeople.has(person.id) ? "selected" : ""} ${person.id === demoSelectedPersonId ? "demo-selected-now" : ""}" data-person="${person.id}" type="button" aria-pressed="${selectedPeople.has(person.id)}" ${demoStage !== "idle" ? "disabled" : ""}>
               <span class="deployment-avatar">${person.callsign.slice(0, 1)}</span>
               <span><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role}</small><i>${person.weapon.toUpperCase()} · ${assignmentLabels[person.assignment]}</i></span>
               <span class="deployment-status ${person.injuries.length ? "injured" : ""}"><b>${selectedPeople.has(person.id) ? "SELECTED · " : ""}${conditionLabel(person)}</b><small>${deploymentAmmoCost(offer, person)} AMMO</small></span>
@@ -316,7 +374,7 @@ const renderDeploymentPlanner = (
         <footer>
           <div><small>DEPLOYMENT PROTOCOL</small><b>${squadProtocol}</b></div>
           <div><small>DEPLOYMENT AMMUNITION</small><b class="${ammoCost > availableAmmo ? "insufficient" : ""}">${ammoCost} / ${availableAmmo}</b></div>
-          <button class="warm-button" id="launch-operation" type="button" ${selected.length === 0 || ammoCost > availableAmmo ? "disabled" : ""}>ESTABLISH GHOSTLINK</button>
+          <button class="warm-button" id="launch-operation" type="button" ${selected.length === 0 || ammoCost > availableAmmo || demoStage !== "idle" ? "disabled" : ""}>ESTABLISH LINK</button>
         </footer>
       </div>
     </section>

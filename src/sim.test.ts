@@ -28,6 +28,17 @@ describe("Tactical squad orders", () => {
     const targets = simulation.state.units.map((unit) => `${unit.target.x},${unit.target.y}`);
     expect(new Set(targets).size).toBe(simulation.state.units.length);
     expect(new Set(simulation.state.units.map((unit) => unit.moveSpeed)).size).toBe(1);
+    expect(simulation.state.units[0].moveSpeed).toBeCloseTo(3.3);
+  });
+
+  it("publishes each weapon's distinct attack range and reload duration", () => {
+    const simulation = new Simulation();
+    const byWeapon = Object.fromEntries(simulation.state.units.map((unit) => [unit.weapon, unit]));
+
+    expect(byWeapon.rifle.attackRange).toBe(9);
+    expect(byWeapon.shotgun.attackRange).toBe(5.8);
+    expect(byWeapon.smg.attackRange).toBe(7.2);
+    expect(byWeapon.shotgun.reloadDuration).toBeGreaterThan(byWeapon.smg.reloadDuration);
   });
 
   it("does not begin scavenging from an ordinary move order", () => {
@@ -86,5 +97,44 @@ describe("Tactical squad orders", () => {
     ));
 
     expect(closest).toBeGreaterThan(12);
+  });
+
+  it("reserves rare runners for reinforcement spawns and makes them fast but fragile", () => {
+    const simulation = new Simulation();
+    const internals = simulation as unknown as {
+      random: () => number;
+      makeContact: (index: number, map: typeof simulation.state.map, units: typeof simulation.state.units, requireSafe: boolean, allowRunner: boolean) => typeof simulation.state.contacts[number] | null;
+    };
+
+    expect(simulation.state.contacts.every((contact) => contact.kind === "walker")).toBe(true);
+    internals.random = () => 0.039;
+    const runner = internals.makeContact(0, simulation.state.map, simulation.state.units, true, true);
+    internals.random = () => 0.041;
+    const walker = internals.makeContact(0, simulation.state.map, simulation.state.units, true, true);
+
+    expect(runner?.kind).toBe("runner");
+    expect(runner?.speed).toBeGreaterThan(2.1);
+    expect(runner?.health).toBe(1);
+    expect(walker?.kind).toBe("walker");
+    expect(walker && runner ? runner.speed > walker.speed * 2 : false).toBe(true);
+  });
+
+  it("turns live contact pressure into a substantially faster reinforcement cadence", () => {
+    const nextSpawnDelay = (pressure: number): number => {
+      const simulation = new Simulation();
+      const internals = simulation as unknown as { random: () => number; spawnTimer: number };
+      simulation.state.breachOpen = true;
+      simulation.state.map.breach.open = true;
+      simulation.state.threat = pressure;
+      internals.spawnTimer = 0;
+      internals.random = () => 0.5;
+      simulation.update(0);
+      return internals.spawnTimer;
+    };
+
+    const lowPressureDelay = nextSpawnDelay(0.1);
+    const highPressureDelay = nextSpawnDelay(0.9);
+
+    expect(lowPressureDelay).toBeGreaterThan(highPressureDelay + 3);
   });
 });

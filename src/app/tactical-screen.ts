@@ -113,8 +113,9 @@ export const mountTacticalScreen = (
           <div class="feed-label top-left"><span class="live-dot"></span><b id="feed-label">TACTICAL RECONSTRUCTION</b><small>${escapeHtml(deployment.offer.location.toUpperCase())}</small></div>
           <div class="feed-label top-right"><b id="timecode">00:00</b><small id="feed-quality">LIVE CONTACT MODEL</small></div>
           ${demoMode ? `<div class="demo-guide" id="demo-guide" role="status" aria-live="polite"><small>STEP 1 OF 3</small><b>Press F to breach the marked entry.</b></div>` : ""}
+          <button class="viewport-extract-button" id="viewport-extract-button" type="button">CALL EXTRACTION · ALL STANDING SURVIVORS READY</button>
           <div class="zoom-readout"><button id="zoom-out" type="button">−</button><span id="zoom-value">110%</span><button id="zoom-in" type="button">+</button></div>
-          <div class="retask-hint" id="retask-hint" role="status" aria-live="polite">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · 1–9 FOCUS</div>
+          <div class="retask-hint" id="retask-hint" role="status" aria-live="polite">DRAG SELECT · RMB MOVE / SCAVENGE · WASD PAN · DOUBLE-CLICK CARD / 1–9 FOCUS</div>
           <div class="performance-hud" id="performance-hud">
             <span><small>FPS</small><b id="perf-fps">--</b></span><span><small>STATIC PTS</small><b id="perf-static">--</b></span><span><small>DYNAMIC PTS</small><b id="perf-dynamic">--</b></span><span><small>CONTACTS</small><b id="perf-contacts">--</b></span><span><small>DRAW CALLS</small><b id="perf-draws">2</b></span>
           </div>
@@ -147,6 +148,7 @@ export const mountTacticalScreen = (
     gpuLidar = new GpuLidarRenderer(glCanvas, simulation.state.map, { forceFallback: true });
   }
   const camera: Camera = { zoom: 0.94, panX: 0, panY: 0 };
+  let cameraTransition: { startX: number; startY: number; targetX: number; targetY: number; startedAt: number; duration: number } | null = null;
   let cssWidth = 1;
   let cssHeight = 1;
   let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -185,9 +187,10 @@ export const mountTacticalScreen = (
     const markup = simulation.state.units.map((unit) => {
       const order = unit.state === "collecting" ? "SCAVENGING — DEFENCE REDUCED" : unit.state === "moving" ? "MOVING IN FORMATION — WEAPONS LIMITED" : unit.state === "reloading" ? `RELOADING · ${Math.max(0, unit.reloadTimer).toFixed(1)}S` : unit.state === "down" ? "INCAPACITATED · LINK ACTIVE" : "HOLDING · ENGAGING";
       return `
-        <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
+        <button class="unit-card ${unit.selected ? "selected" : ""} ${unit.state === "reloading" ? "reloading" : ""} ${unit.state === "down" ? "down" : ""}" data-unit="${unit.id}" type="button">
           <span class="unit-index">${unit.id}</span><span class="unit-silhouette role-${unit.role.toLowerCase()}"><i>${roleIcon[unit.role]}</i></span>
           <span class="unit-info"><span class="unit-heading"><b>${escapeHtml(unit.name)}</b><small>${unit.role}</small></span><span class="stat-line health"><i style="width:${unit.health}%"></i></span><span class="unit-meta"><span>♥ ${Math.round(unit.health)}</span><span>▥ ${unit.ammo}+${unit.reserveAmmo}</span><span>SCV ${unit.scavengeSkill}</span></span><span class="unit-order">${order}</span></span>
+          ${unit.state === "reloading" ? `<span class="reload-flag">RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S</span>` : ""}
         </button>
       `;
     }).join("");
@@ -200,7 +203,10 @@ export const mountTacticalScreen = (
     if (!(event.target instanceof Element)) return;
     const button = event.target.closest<HTMLButtonElement>("[data-unit]");
     if (!button || !unitCards.contains(button)) return;
-    simulation.selectUnit(Number(button.dataset.unit), event.shiftKey);
+    const unit = simulation.state.units.find((candidate) => candidate.id === Number(button.dataset.unit));
+    if (!unit) return;
+    simulation.selectUnit(unit.id, event.shiftKey);
+    if (event.detail > 1 && !event.shiftKey) centerOnUnit(unit);
   };
   unitCards.addEventListener("click", unitCardClickHandler);
 
@@ -248,6 +254,9 @@ export const mountTacticalScreen = (
     extractButton.textContent = extractReady ? "CALL EXTRACTION" : recovered ? "RETURN SQUAD TO LANDING" : "RECOVER A CACHE TO EXTRACT";
     extractButton.disabled = !extractReady;
     extractButton.classList.toggle("ready", extractReady);
+    const viewportExtractButton = get<HTMLButtonElement>("#viewport-extract-button");
+    viewportExtractButton.disabled = !extractReady;
+    viewportExtractButton.classList.toggle("ready", extractReady);
     if (gpuLidar.available) {
       get("#perf-fps").textContent = Math.round(gpuLidar.stats.fps).toString();
       get("#perf-static").textContent = `${Math.round(gpuLidar.stats.staticPoints / 1000)}K`;
@@ -267,10 +276,17 @@ export const mountTacticalScreen = (
     if (resolved) return;
     resolved = true;
     handlers.onResolve(outcome);
+    const showcaseComplete = demoMode && outcome.success;
+    const resultEyebrow = showcaseComplete ? "BUILD WEEK SHOWCASE COMPLETE" : "GHOSTLINK SESSION CLOSED";
+    const resultHeading = showcaseComplete ? "LINK CLOSED. THE CAMPAIGN CONTINUES." : outcome.success ? "OPERATION RESOLVED" : "OPERATION FAILED";
+    const operationSummary = `${outcome.cachesRecovered} of ${outcome.cacheCount} caches recovered${outcome.objectiveCompleted ? "; the site was cleared." : "; the squad withdrew with partial salvage."} ${outcome.downPersonIds.length ? `${outcome.downPersonIds.length} survivor${outcome.downPersonIds.length === 1 ? " was" : "s were"} down when the link closed.` : "All linked survivors remained standing."}`;
+    const resultCopy = showcaseComplete
+      ? `${operationSummary} This concludes the guided mission. In the full campaign, survivors retain their injuries, ammunition, equipment and individual histories; salvage returns to the outpost, where you assign personnel and choose the next opportunity.`
+      : operationSummary;
     const result = document.createElement("section");
     result.className = `mission-result ${outcome.success ? "success" : "failure"}`;
     result.innerHTML = `
-      <div><small>GHOSTLINK SESSION CLOSED</small><h1>${outcome.success ? "OPERATION RESOLVED" : "OPERATION FAILED"}</h1><p>${outcome.cachesRecovered} of ${outcome.cacheCount} caches recovered${outcome.objectiveCompleted ? "; the site was cleared." : "; the squad withdrew with partial salvage."} ${outcome.downPersonIds.length ? `${outcome.downPersonIds.length} survivor${outcome.downPersonIds.length === 1 ? " was" : "s were"} down when the link closed.` : "All linked survivors remained standing."}</p><section><span><small>RETURNED</small><b>${outcome.extractedPersonIds.length}</b></span><span><small>CACHES</small><b>${outcome.cachesRecovered}/${outcome.cacheCount}</b></span><span><small>CONTACTS</small><b>${outcome.contactsNeutralised}</b></span><span><small>AMMO LEFT</small><b>${outcome.ammunitionRemaining}</b></span></section><button class="pause-button" id="return-to-base" type="button">RETURN TO OUTPOST COMMAND</button></div>
+      <div><small>${resultEyebrow}</small><h1>${resultHeading}</h1><p>${resultCopy}</p><section><span><small>RETURNED</small><b>${outcome.extractedPersonIds.length}</b></span><span><small>CACHES</small><b>${outcome.cachesRecovered}/${outcome.cacheCount}</b></span><span><small>NEUTRALISED</small><b>${outcome.contactsNeutralised}</b></span><span><small>AMMO LEFT</small><b>${outcome.ammunitionRemaining}</b></span></section><div class="mission-result-actions"><button class="pause-button" id="return-to-base" type="button">${showcaseComplete ? "REVIEW OUTPOST CONSEQUENCES" : "RETURN TO OUTPOST COMMAND"}</button>${showcaseComplete ? `<a href="./">OPEN FULL CAMPAIGN</a>` : ""}</div></div>
     `;
     root.append(result);
     result.querySelector<HTMLButtonElement>("#return-to-base")?.addEventListener("click", handlers.onReturn);
@@ -293,12 +309,22 @@ export const mountTacticalScreen = (
     lastCacheSequence = state.cacheSequence;
   };
 
+  const updateCameraTransition = (now: number): void => {
+    if (!cameraTransition) return;
+    const progress = Math.min(1, (now - cameraTransition.startedAt) / cameraTransition.duration);
+    const eased = 1 - (1 - progress) ** 3;
+    camera.panX = cameraTransition.startX + (cameraTransition.targetX - cameraTransition.startX) * eased;
+    camera.panY = cameraTransition.startY + (cameraTransition.targetY - cameraTransition.startY) * eased;
+    if (progress >= 1) cameraTransition = null;
+  };
+
   const frame = (now: number): void => {
-    const frameInterval = simulation.state.paused ? 180 : 15;
+    const frameInterval = simulation.state.paused && !cameraTransition ? 180 : 15;
     if (now - lastRender < frameInterval) { animationFrame = requestAnimationFrame(frame); return; }
     const dt = Math.max(0, Math.min((now - lastFrame) / 1000, .06));
     lastFrame = now;
     lastRender = now;
+    updateCameraTransition(now);
     if (pixelRatio !== Math.min(window.devicePixelRatio || 1, 2)) resizeCanvas();
     if (benchmarkMode && gpuLidar.available) simulation.updateBenchmark(dt);
     else simulation.update(dt);
@@ -341,6 +367,7 @@ export const mountTacticalScreen = (
   };
 
   const zoomAt = (screenPoint: Vec2, requestedZoom: number): void => {
+    cameraTransition = null;
     const transform = currentTransform();
     if (!transform) return;
     const displayPoint = transform.toWorld(screenPoint);
@@ -356,8 +383,14 @@ export const mountTacticalScreen = (
   const centerOnUnit = (unit: Unit): void => {
     const point = unitScreenPoint(unit);
     if (!point) return;
-    camera.panX += cssWidth * 0.5 - point.x;
-    camera.panY += cssHeight * 0.5 - point.y;
+    cameraTransition = {
+      startX: camera.panX,
+      startY: camera.panY,
+      targetX: camera.panX + cssWidth * 0.5 - point.x,
+      targetY: camera.panY + cssHeight * 0.5 - point.y,
+      startedAt: performance.now(),
+      duration: 460,
+    };
   };
 
   const updateSelectionBox = (): void => {
@@ -379,6 +412,7 @@ export const mountTacticalScreen = (
       updateSelectionBox();
     } else if (event.button === 1) {
       event.preventDefault();
+      cameraTransition = null;
       panDrag = { start: canvasPoint(event), panX: camera.panX, panY: camera.panY };
       canvas.setPointerCapture(event.pointerId);
       canvas.classList.add("panning");
@@ -467,14 +501,14 @@ export const mountTacticalScreen = (
       const unit = simulation.state.units.find((candidate) => candidate.id === Number(event.key));
       if (unit) { simulation.selectUnit(unit.id); centerOnUnit(unit); }
     }
-    else if (event.key.toLowerCase() === "a") camera.panX += 42;
-    else if (event.key.toLowerCase() === "d") camera.panX -= 42;
-    else if (event.key.toLowerCase() === "w") camera.panY += 42;
-    else if (event.key.toLowerCase() === "s") camera.panY -= 42;
-    else if (event.key === "ArrowLeft") camera.panX += 42;
-    else if (event.key === "ArrowRight") camera.panX -= 42;
-    else if (event.key === "ArrowUp") camera.panY += 42;
-    else if (event.key === "ArrowDown") camera.panY -= 42;
+    else if (event.key.toLowerCase() === "a") { cameraTransition = null; camera.panX += 42; }
+    else if (event.key.toLowerCase() === "d") { cameraTransition = null; camera.panX -= 42; }
+    else if (event.key.toLowerCase() === "w") { cameraTransition = null; camera.panY += 42; }
+    else if (event.key.toLowerCase() === "s") { cameraTransition = null; camera.panY -= 42; }
+    else if (event.key === "ArrowLeft") { cameraTransition = null; camera.panX += 42; }
+    else if (event.key === "ArrowRight") { cameraTransition = null; camera.panX -= 42; }
+    else if (event.key === "ArrowUp") { cameraTransition = null; camera.panY += 42; }
+    else if (event.key === "ArrowDown") { cameraTransition = null; camera.panY -= 42; }
     else if (event.key === "+" || event.key === "=") zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom * 1.18);
     else if (event.key === "-") zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom / 1.18);
   };
@@ -485,10 +519,12 @@ export const mountTacticalScreen = (
   get<HTMLButtonElement>("#select-all").addEventListener("click", () => simulation.selectAll());
   get<HTMLButtonElement>("#breach-order").addEventListener("click", () => showHint(simulation.issueBreach() ? "ENTRY BREACH OPEN" : simulation.state.breachOpen ? "ENTRY ALREADY OPEN" : "SELECT A SURVIVOR AT THE BREACH", !simulation.state.breachOpen));
   get<HTMLButtonElement>("#move-order").addEventListener("click", () => showHint("RIGHT-CLICK GROUND TO MOVE · RIGHT-CLICK CACHE TO SCAVENGE"));
-  get<HTMLButtonElement>("#extract-button").addEventListener("click", () => {
+  const callExtraction = (): void => {
     try { showResult(simulation.extract()); }
     catch (error) { showHint(error instanceof Error ? error.message.toUpperCase() : "EXTRACTION NOT READY"); }
-  });
+  };
+  get<HTMLButtonElement>("#extract-button").addEventListener("click", callExtraction);
+  get<HTMLButtonElement>("#viewport-extract-button").addEventListener("click", callExtraction);
   get<HTMLButtonElement>("#zoom-in").addEventListener("click", () => zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom * 1.22));
   get<HTMLButtonElement>("#zoom-out").addEventListener("click", () => zoomAt({ x: cssWidth / 2, y: cssHeight / 2 }, camera.zoom / 1.22));
   canvas.addEventListener("pointerdown", pointerDownHandler);

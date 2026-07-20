@@ -125,12 +125,22 @@ button { font: inherit; color: inherit; }
 .demo-guide { position: absolute; z-index: 8; left: 50%; top: 18px; transform: translateX(-50%); width: min(560px, calc(100% - 180px)); display: flex; align-items: center; gap: 14px; padding: 11px 15px; border: 1px solid rgba(var(--accent-rgb),.45); background: rgba(3,11,14,.9); box-shadow: 0 12px 36px rgba(0,0,0,.44), inset 3px 0 var(--accent); pointer-events: none; }
 .demo-guide small { flex: 0 0 auto; color: var(--accent); font-size: 9px; letter-spacing: .14em; }
 .demo-guide b { color: #d2e4e7; font-size: 11px; line-height: 1.35; letter-spacing: .035em; }
+.viewport-extract-button { position: absolute; z-index: 9; left: 50%; top: 18px; transform: translateX(-50%); display: none; min-height: 46px; padding: 0 22px; border: 1px solid rgba(85,240,207,.8); background: rgba(8,42,38,.94); color: #87ffe4; box-shadow: 0 12px 36px rgba(0,0,0,.5), inset 0 -3px rgba(85,240,207,.55), 0 0 22px rgba(85,240,207,.14); font: 800 11px "Roboto Mono", monospace; letter-spacing: .08em; cursor: pointer; }
+.demo-guide ~ .viewport-extract-button { top: 76px; }
+.viewport-extract-button.ready { display: block; animation: extraction-ready 1.2s ease-in-out infinite alternate; }
+.viewport-extract-button:hover { background: rgba(14,68,58,.98); }
+@keyframes extraction-ready { from { box-shadow: 0 12px 36px rgba(0,0,0,.5), inset 0 -3px rgba(85,240,207,.5), 0 0 12px rgba(85,240,207,.1); } to { box-shadow: 0 12px 36px rgba(0,0,0,.5), inset 0 -3px rgba(85,240,207,.85), 0 0 30px rgba(85,240,207,.3); } }
 
 .squad-title { height: 45px; margin: 0; padding: 0 4px; border-bottom: 1px solid var(--line); }
 .unit-cards { min-height: 0; display: grid; grid-template-rows: repeat(4, minmax(0,1fr)); gap: 8px; padding: 9px 0; }
 .tactical-unit-cards { overflow-y: auto; grid-template-rows: none; grid-auto-rows: minmax(92px, 1fr); }
 .unit-card { min-height: 0; width: 100%; position: relative; display: grid; grid-template-columns: 56px 1fr; align-items: stretch; border: 1px solid rgba(124,165,176,.19); background: rgba(112,150,160,.035); padding: 0; text-align: left; cursor: pointer; overflow: hidden; }
 .unit-card:hover, .unit-card.selected { border-color: rgba(var(--accent-rgb), .55); background: rgba(var(--accent-rgb), .075); box-shadow: inset 3px 0 var(--accent); }
+.unit-card.reloading { border-color: rgba(255,188,73,.68); background: rgba(255,174,45,.085); box-shadow: inset 3px 0 #ffc35a, 0 0 18px rgba(255,174,45,.08); animation: reload-card-pulse .72s ease-in-out infinite alternate; }
+.unit-card.reloading .unit-silhouette i { color: #ffc35a; border-color: rgba(255,195,90,.72); box-shadow: 0 0 16px rgba(255,174,45,.28), inset 0 0 10px rgba(255,174,45,.18); }
+.unit-card.reloading .unit-order { color: #ffc35a; }
+.reload-flag { position: absolute; right: 6px; top: 5px; padding: 3px 5px; border: 1px solid rgba(255,195,90,.62); background: rgba(31,20,6,.94); color: #ffd17b; font-size: 7px; letter-spacing: .08em; }
+@keyframes reload-card-pulse { from { box-shadow: inset 3px 0 #ffc35a, 0 0 8px rgba(255,174,45,.04); } to { box-shadow: inset 3px 0 #ffc35a, 0 0 20px rgba(255,174,45,.16); } }
 .unit-card.down { border-color: rgba(237,85,71,.6); opacity: .72; }
 .unit-index { position: absolute; left: 5px; top: 5px; z-index: 2; width: 17px; height: 17px; display: grid; place-items: center; color: var(--accent); border: 1px solid rgba(var(--accent-rgb), .55); background: #081014; font-size: 8px; }
 .unit-silhouette { display: grid; place-items: center; background: radial-gradient(circle at 50% 45%, rgba(var(--accent-rgb), .22), transparent 60%), repeating-linear-gradient(0deg, rgba(var(--accent-rgb),.04) 0 1px, transparent 1px 3px); border-right: 1px solid var(--line); }
@@ -178,6 +188,9 @@ button { font: inherit; color: inherit; }
 .mission-result section small { color: #557078; font-size: 6px; }
 .mission-result section b { color: #d3e3e6; font-size: 17px; }
 .mission-result button { padding: 12px 22px; }
+.mission-result-actions { display: flex; justify-content: center; align-items: center; gap: 18px; }
+.mission-result-actions a { padding: 12px 18px; border: 1px solid rgba(var(--accent-rgb),.34); color: var(--accent); font-size: 9px; letter-spacing: .08em; text-decoration: none; }
+.mission-result-actions a:hover { border-color: rgba(var(--accent-rgb),.72); background: rgba(var(--accent-rgb),.08); }
 
 @media (max-width: 1200px) {
   .workarea { grid-template-columns: 210px minmax(0,1fr) 230px; }

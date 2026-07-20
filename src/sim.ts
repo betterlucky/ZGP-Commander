@@ -20,8 +20,10 @@ const defaultSetup: TacticalSetup = {
 const weaponMagazine: Record<Unit["weapon"], number> = { rifle: 24, shotgun: 8, smg: 30, carbine: 24 };
 const weaponReserve: Record<Unit["weapon"], number> = { rifle: 48, shotgun: 24, smg: 60, carbine: 48 };
 const weaponReloadTime: Record<Unit["weapon"], number> = { rifle: 2.4, shotgun: 3.2, smg: 2.1, carbine: 2.3 };
-const roleSpeed: Record<Unit["role"], number> = { MEDIC: 3.15, SCAVENGER: 3.0, RANGER: 3.25, ENGINEER: 3.05 };
+const weaponRange: Record<Unit["weapon"], number> = { rifle: 9, shotgun: 5.8, smg: 7.2, carbine: 7.2 };
+const roleSpeed: Record<Unit["role"], number> = { MEDIC: 3.45, SCAVENGER: 3.3, RANGER: 3.55, ENGINEER: 3.35 };
 const safeSpawnDistance = 16;
+const runnerSpawnChance = 0.04;
 
 export class Simulation {
   public state: SimulationState;
@@ -52,6 +54,8 @@ export class Simulation {
         facing: -Math.PI / 2,
         speed: roleSpeed[template.role],
         moveSpeed: roleSpeed[template.role],
+        attackRange: weaponRange[template.weapon],
+        reloadDuration: weaponReloadTime[template.weapon],
         ammo: maxAmmo,
         maxAmmo,
         reserveAmmo: weaponReserve[template.weapon],
@@ -105,7 +109,7 @@ export class Simulation {
     return state;
   }
 
-  private makeContact(index = 0, map = this.state.map, units = this.state.units, requireSafe = false): Contact | null {
+  private makeContact(index = 0, map = this.state.map, units = this.state.units, requireSafe = false, allowRunner = false): Contact | null {
     const standingUnits = units.filter((unit) => unit.state !== "down");
     if (requireSafe && !standingUnits.length) return null;
     const rankedSpawns = map.contactSpawns
@@ -115,21 +119,23 @@ export class Simulation {
     if (requireSafe && !safeSpawns.length) return null;
     const spawnPool = safeSpawns.length ? safeSpawns : rankedSpawns.slice(0, 2);
     const spawn = spawnPool[index % spawnPool.length].spawn;
+    const kind = allowRunner && this.random() < runnerSpawnChance ? "runner" : "walker";
     const jitter = () => (this.random() - 0.5) * 1.4;
     const pos = nearestWalkable(map, { x: spawn.x + jitter(), y: spawn.y + jitter() });
     return {
       id: this.nextContactId++,
+      kind,
       pos,
       prev: { ...pos },
       target: 3,
       path: [],
       repath: this.random() * 0.8,
       facing: Math.PI,
-      speed: 0.72 + this.random() * 0.52,
+      speed: kind === "runner" ? 2.15 + this.random() * 0.4 : 0.72 + this.random() * 0.52,
       phase: this.random() * Math.PI * 2,
       heat: 0.7 + this.random() * 0.3,
       confidence: 0.45 + this.random() * 0.55,
-      health: this.random() > 0.82 ? 2 : 1,
+      health: kind === "runner" ? 1 : this.random() > 0.82 ? 2 : 1,
       alive: true,
       hitFlash: 0,
       attackCooldown: this.random(),
@@ -288,13 +294,15 @@ export class Simulation {
 
     if (state.breachOpen) this.spawnTimer -= dt;
     const living = state.contacts.filter((contact) => contact.alive).length;
-    const contactLimit = 16 + Math.round(this.setup.threat * 18);
+    const contactLimit = 16 + Math.round(state.threat * 18);
     if (state.breachOpen && this.spawnTimer <= 0 && living < contactLimit) {
-      const newcomer = this.makeContact(Math.floor(this.random() * state.map.contactSpawns.length), state.map, state.units, true);
+      const newcomer = this.makeContact(Math.floor(this.random() * state.map.contactSpawns.length), state.map, state.units, true, true);
       if (newcomer) {
         state.contacts.push(newcomer);
-        this.spawnTimer = 2.1 + this.random() * (4.8 - this.setup.threat * 2.4);
-        if (this.random() > 0.58) this.pushEvent("SENSOR", "New contact crossing an external wall entry.", "warning");
+        const lowPressure = 1 - state.threat;
+        this.spawnTimer = 1.6 + lowPressure * 3.8 + this.random() * (0.7 + lowPressure * 1.1);
+        if (newcomer.kind === "runner") this.pushEvent("SENSOR", "High-velocity contact crossing an external wall entry.", "warning");
+        else if (this.random() > 0.58) this.pushEvent("SENSOR", "New contact crossing an external wall entry.", "warning");
       } else this.spawnTimer = 1;
     }
     state.contacts = state.contacts.filter((contact) => contact.alive || contact.hitFlash > 0);
@@ -383,7 +391,7 @@ export class Simulation {
       } else if (unit.state === "moving") unit.state = "holding";
 
       if (unit.state === "holding" && unit.shotCooldown <= 0 && unit.ammo > 0) {
-        const range = unit.weapon === "rifle" ? 9 : unit.weapon === "shotgun" ? 5.8 : 7.2;
+        const range = unit.attackRange;
         let closest: Contact | undefined;
         let closestDistance = range;
         for (const contact of contacts) {
@@ -496,6 +504,6 @@ export class Simulation {
     unit.state = "reloading";
     unit.interaction = null;
     unit.moveSpeed = unit.speed;
-    unit.reloadTimer = weaponReloadTime[unit.weapon];
+    unit.reloadTimer = unit.reloadDuration;
   }
 }

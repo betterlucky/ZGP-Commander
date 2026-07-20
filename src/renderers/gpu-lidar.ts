@@ -343,6 +343,7 @@ export class GpuLidarRenderer {
     if (!transform) return;
     ctx.clearRect(0, 0, width, height);
     this.drawSectorLabels(ctx, transform);
+    this.drawAttackRanges(ctx, state, transform);
     this.drawOrders(ctx, state, transform);
     this.drawObjectives(ctx, state, transform);
     this.labelBounds.length = 0;
@@ -597,14 +598,15 @@ export class GpuLidarRenderer {
         const fade = contact.alive ? 1 : Math.min(1, contact.hitFlash);
         const flash = Math.min(1, contact.hitFlash);
         const verticalOffset = Math.sin(time * 3 + contact.phase) * 0.025;
-        const red = 0.045 + flash * 0.72;
-        const blue = 0.018 + flash * 0.38;
+        const green = (contact.kind === "runner" ? 0.13 : 0.045) + flash * 0.72;
+        const blue = (contact.kind === "runner" ? 0.028 : 0.018) + flash * 0.38;
         const alphaScale = contact.confidence * fade;
         const sizeScale = 3.35 + flash * 1.2;
         for (const point of points) {
-          const x = originX + point.x * cos - point.y * sin;
-          const y = originY + point.x * sin + point.y * cos;
-          cursor = writePackedPoint(this.dynamicData, cursor, x, y, point.z + verticalOffset, 1, red, blue, point.alpha * alphaScale, point.size * sizeScale);
+          const localX = point.x + (contact.kind === "runner" ? point.z * 0.18 : 0);
+          const x = originX + localX * cos - point.y * sin;
+          const y = originY + localX * sin + point.y * cos;
+          cursor = writePackedPoint(this.dynamicData, cursor, x, y, point.z + verticalOffset, 1, green, blue, point.alpha * alphaScale, point.size * sizeScale);
         }
       }
       this.stats.contacts = livingContacts;
@@ -617,10 +619,11 @@ export class GpuLidarRenderer {
       const originX = unit.pos.x + this.displayOffset.x;
       const originY = unit.pos.y + this.displayOffset.y;
       const bob = unit.state === "moving" ? Math.sin(unit.phase * 2) * 0.035 : 0;
+      const reloading = unit.state === "reloading";
       for (const point of points) {
         const x = originX + point.x * cos - point.y * sin;
         const y = originY + point.x * sin + point.y * cos;
-        cursor = writePackedPoint(this.dynamicData, cursor, x, y, point.z + bob, 0.46, 0.97, 1, Math.min(1, point.alpha * 1.28), point.size * 2.85);
+        cursor = writePackedPoint(this.dynamicData, cursor, x, y, point.z + bob, reloading ? 1 : 0.46, reloading ? 0.62 : 0.97, reloading ? 0.18 : 1, Math.min(1, point.alpha * 1.28), point.size * 2.85);
       }
     }
     this.dynamicPointCount = cursor / STRIDE_FLOATS;
@@ -639,6 +642,27 @@ export class GpuLidarRenderer {
         ctx.fillStyle = "rgba(104,188,210,.22)";
         ctx.fillText(`SECTOR ${String.fromCharCode(65 + y * QUADRANTS + x)}`, center.x, center.y);
       }
+    }
+    ctx.restore();
+  }
+
+  private drawAttackRanges(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
+    const selected = state.units.filter((unit) => unit.selected && unit.state !== "down");
+    if (!selected.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 5]);
+    for (const unit of selected) {
+      const center = transform.toScreen(this.offsetPoint(unit.pos), 0.01);
+      const radiusX = unit.attackRange * transform.tileW * Math.SQRT1_2;
+      const radiusY = unit.attackRange * transform.tileH * Math.SQRT1_2;
+      ctx.fillStyle = unit.state === "reloading" ? "rgba(255,181,64,.025)" : "rgba(73,221,255,.022)";
+      ctx.strokeStyle = unit.state === "reloading" ? "rgba(255,190,77,.18)" : "rgba(81,226,255,.16)";
+      ctx.beginPath();
+      ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -688,6 +712,14 @@ export class GpuLidarRenderer {
     ctx.setLineDash(unit.selected ? [4, 3] : []);
     ctx.beginPath(); ctx.ellipse(ground.x, ground.y, 8, 4, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+    if (unit.state === "reloading") {
+      const progress = 1 - unit.reloadTimer / unit.reloadDuration;
+      ctx.strokeStyle = "rgba(255,196,91,.95)"; ctx.lineWidth = 2.2; ctx.shadowColor = "#ffc45b"; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.arc(ground.x, ground.y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress); ctx.stroke();
+      ctx.fillStyle = "#ffd27d"; ctx.font = "700 8px monospace"; ctx.textAlign = "center";
+      ctx.fillText(`RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S`, ground.x, ground.y + 22);
+      ctx.shadowBlur = 0;
+    }
     const label = `${unit.id}  ${unit.name}  ·  ${unit.role}`;
     ctx.font = "700 9px monospace";
     let width = this.labelWidths.get(unit.id);

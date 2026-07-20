@@ -25,6 +25,7 @@ export class LidarRenderer {
     ctx.fillRect(0, 0, width, height);
 
     this.drawFloor(ctx, state, transform);
+    this.drawAttackRanges(ctx, state, transform);
     this.drawPaths(ctx, state, transform);
     this.drawProps(ctx, state, transform);
     this.drawWalls(ctx, state, transform);
@@ -155,6 +156,27 @@ export class LidarRenderer {
     }
   }
 
+  private drawAttackRanges(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
+    const selected = state.units.filter((unit) => unit.selected && unit.state !== "down");
+    if (!selected.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineWidth = 0.8;
+    ctx.setLineDash([4, 5]);
+    for (const unit of selected) {
+      const center = transform.toScreen(unit.pos, 0.01);
+      const radiusX = unit.attackRange * transform.tileW * Math.SQRT1_2;
+      const radiusY = unit.attackRange * transform.tileH * Math.SQRT1_2;
+      ctx.fillStyle = unit.state === "reloading" ? "rgba(255,181,64,.025)" : "rgba(73,221,255,.022)";
+      ctx.strokeStyle = unit.state === "reloading" ? "rgba(255,190,77,.18)" : "rgba(81,226,255,.16)";
+      ctx.beginPath();
+      ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   private drawObjectives(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -239,18 +261,6 @@ export class LidarRenderer {
       }
     }
 
-    if (unit.state === "holding") {
-      const coneLength = unit.weapon === "rifle" ? 7.5 : 5.8;
-      const spread = 0.42;
-      const cone = [
-        transform.toScreen(unit.pos, 0.03),
-        transform.toScreen({ x: unit.pos.x + Math.cos(unit.facing - spread) * coneLength, y: unit.pos.y + Math.sin(unit.facing - spread) * coneLength }, 0.03),
-        transform.toScreen({ x: unit.pos.x + Math.cos(unit.facing + spread) * coneLength, y: unit.pos.y + Math.sin(unit.facing + spread) * coneLength }, 0.03),
-      ];
-      ctx.save(); ctx.fillStyle = "rgba(60,215,245,.055)"; ctx.strokeStyle = "rgba(75,226,252,.25)"; ctx.lineWidth = 0.8;
-      ctx.beginPath(); ctx.moveTo(cone[0].x, cone[0].y); ctx.lineTo(cone[1].x, cone[1].y); ctx.lineTo(cone[2].x, cone[2].y); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
-    }
-
     const ground = transform.toScreen(unit.pos);
     ctx.save(); ctx.strokeStyle = unit.selected ? "rgba(85,236,255,.9)" : "rgba(85,220,245,.34)";
     ctx.lineWidth = unit.selected ? 1.6 : 0.9; ctx.setLineDash(unit.selected ? [4, 4] : []);
@@ -265,7 +275,7 @@ export class LidarRenderer {
     ctx.shadowColor = unit.color; ctx.shadowBlur = 5; ctx.lineWidth = 1.05; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(head.x, head.y); ctx.lineTo(chest.x, chest.y); ctx.lineTo(hip.x, hip.y); ctx.lineTo(leftFoot.x, leftFoot.y);
     ctx.moveTo(hip.x, hip.y); ctx.lineTo(rightFoot.x, rightFoot.y); ctx.moveTo(chest.x, chest.y); ctx.lineTo(weaponEnd.x, weaponEnd.y); ctx.stroke(); ctx.restore();
-    this.drawCloud(ctx, transform, points, unit.state === "down" ? "#ef5b4c" : unit.color, 8);
+    this.drawCloud(ctx, transform, points, unit.state === "down" ? "#ef5b4c" : unit.state === "reloading" ? "#ffc45b" : unit.color, 8);
 
     if (unit.shotFlash > 0) {
       const muzzle = transform.toScreen({ x: unit.pos.x + forward.x * 1.4, y: unit.pos.y + forward.y * 1.4 }, 1.37);
@@ -282,6 +292,12 @@ export class LidarRenderer {
       const marker = transform.toScreen(unit.pos, 2.85);
       ctx.save(); ctx.strokeStyle = "#ffc04b"; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(marker.x, marker.y, 5 + Math.sin(state.elapsed * 3) * 1.2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+    if (unit.state === "reloading") {
+      const progress = 1 - unit.reloadTimer / unit.reloadDuration;
+      ctx.save(); ctx.strokeStyle = "#ffc45b"; ctx.fillStyle = "#ffd27d"; ctx.lineWidth = 2.2; ctx.shadowColor = "#ffc45b"; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.arc(ground.x, ground.y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress); ctx.stroke();
+      ctx.font = "700 8px monospace"; ctx.textAlign = "center"; ctx.fillText(`RELOAD ${Math.max(0, unit.reloadTimer).toFixed(1)}S`, ground.x, ground.y + 22); ctx.restore();
     }
   }
 
@@ -307,6 +323,7 @@ export class LidarRenderer {
   private drawContact(ctx: CanvasRenderingContext2D, contact: Contact, state: SimulationState, transform: IsoTransform): void {
     const forward = { x: Math.cos(contact.facing), y: Math.sin(contact.facing) };
     const right = { x: -forward.y, y: forward.x };
+    const runnerLean = contact.kind === "runner" ? 0.34 : 0;
     const random = mulberry32(17000 + contact.id * 83);
     const points: Point3[] = [];
     const fragmentation = clamp(contact.confidence, 0.35, 1);
@@ -314,8 +331,8 @@ export class LidarRenderer {
       if (random() > fragmentation) continue;
       const lurch = Math.sin(contact.phase) * 0.18;
       points.push({
-        x: contact.pos.x + forward.x * ((random() - 0.55) * 0.48 + lurch) + right.x * (random() - 0.5) * 0.58,
-        y: contact.pos.y + forward.y * ((random() - 0.55) * 0.48 + lurch) + right.y * (random() - 0.5) * 0.58,
+        x: contact.pos.x + forward.x * ((random() - 0.55) * 0.48 + lurch + runnerLean) + right.x * (random() - 0.5) * 0.58,
+        y: contact.pos.y + forward.y * ((random() - 0.55) * 0.48 + lurch + runnerLean) + right.y * (random() - 0.5) * 0.58,
         z: 0.45 + random() * 1.25,
         alpha: 0.25 + random() * 0.58,
         size: 0.7 + random() * 1.4,
@@ -325,7 +342,7 @@ export class LidarRenderer {
     this.addLimb(points, contact.pos, { x: -right.x * 0.27, y: -right.y * 0.27, z: 1.2 }, { x: -right.x * 0.52 + forward.x * 0.65, y: -right.y * 0.52 + forward.y * 0.65, z: 0.75 }, random, 8);
     const flicker = 0.68 + Math.sin(state.elapsed * 8 + contact.id) * 0.18;
     ctx.save(); ctx.globalAlpha = flicker;
-    this.drawCloud(ctx, transform, points, contact.hitFlash > 0 ? "#ffd8a0" : "#ed3f36", 5);
+    this.drawCloud(ctx, transform, points, contact.hitFlash > 0 ? "#ffd8a0" : contact.kind === "runner" ? "#ff6038" : "#ed3f36", 5);
     ctx.restore();
   }
 

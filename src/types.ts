@@ -5,6 +5,7 @@ export interface Vec2 {
 
 export type UnitState = "moving" | "holding" | "collecting" | "reloading" | "down";
 export type Role = "MEDIC" | "SCAVENGER" | "RANGER" | "ENGINEER";
+export type ContactKind = "walker" | "runner";
 
 export interface Unit {
   id: number;
@@ -19,6 +20,8 @@ export interface Unit {
   facing: number;
   speed: number;
   moveSpeed: number;
+  attackRange: number;
+  reloadDuration: number;
   scavengeSkill: number;
   health: number;
   ammo: number;
@@ -37,6 +40,7 @@ export interface Unit {
 
 export interface Contact {
   id: number;
+  kind: ContactKind;
   pos: Vec2;
   prev: Vec2;
   target: number;

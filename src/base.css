@@ -20,8 +20,8 @@
 .cycle-readout strong { color: var(--base-warm); font-size: 17px; }
 .resource-strip { display: grid; grid-template-columns: repeat(4, minmax(90px,1fr)); }
 .resource-strip span { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 18px; border-right: 1px solid var(--base-line); }
-.resource-strip b { display: flex; align-items: baseline; gap: 7px; color: #e8dfc8; font-size: 16px; }
-.resource-strip b i { color: var(--base-good); font-size: 6px; font-style: normal; white-space: nowrap; }
+.resource-strip b { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; color: #e8dfc8; font-size: 16px; }
+.resource-strip b i { display: inline-flex; padding: 2px 5px; border: 1px solid rgba(121,208,165,.38); background: rgba(121,208,165,.09); color: #92e4bd; font-size: 9px; font-style: normal; line-height: 1; letter-spacing: .07em; white-space: nowrap; }
 .warm-button { border: 1px solid rgba(var(--base-warm-rgb),.55); background: rgba(var(--base-warm-rgb),.12); color: var(--base-warm); font-weight: 800; font-size: 9px; letter-spacing: .1em; cursor: pointer; }
 .warm-button:hover:not(:disabled) { background: rgba(var(--base-warm-rgb),.22); box-shadow: inset 0 -2px var(--base-warm); }
 .warm-button:disabled, .quiet-button:disabled { opacity: .4; cursor: not-allowed; }
@@ -123,11 +123,19 @@
 
 .deployment-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 28px; background: rgba(4,6,5,.76); backdrop-filter: blur(5px); }
 .deployment-dialog { width: min(1050px, 94vw); max-height: 90vh; display: grid; grid-template-rows: 62px auto minmax(180px,1fr) 76px; background: #11130f; border: 1px solid rgba(var(--base-warm-rgb),.48); box-shadow: 0 24px 90px #000; }
-.deployment-dialog > header { display: flex; justify-content: space-between; align-items: center; padding: 0 18px; border-bottom: 1px solid var(--base-line); }
+.deployment-dialog > header { position: relative; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; border-bottom: 1px solid var(--base-line); }
 .deployment-dialog > header span { display: flex; flex-direction: column; gap: 5px; }
 .deployment-dialog > header small { color: var(--base-warm); font-size: 7px; }
 .deployment-dialog > header strong { color: #e1d9c4; font-size: 15px; }
 .deployment-dialog > header button { width: 36px; height: 36px; border: 1px solid var(--base-line); background: transparent; color: #8c8678; cursor: pointer; font-size: 19px; }
+.deployment-dialog > header button:disabled { opacity: .25; cursor: default; }
+.deployment-demo-guide { position: absolute; z-index: 2; left: 50%; top: 50%; width: min(500px, 54%); min-height: 42px; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 12px; padding: 7px 12px; border: 1px solid rgba(var(--base-warm-rgb),.42); background: rgba(21,24,18,.97); box-shadow: 0 8px 28px rgba(0,0,0,.48), inset 3px 0 var(--base-warm); }
+.deployment-demo-guide small { flex: 0 0 auto; color: var(--base-warm) !important; font-size: 8px !important; letter-spacing: .1em; }
+.deployment-demo-guide b { color: #d8cfba; font-size: 10px; line-height: 1.35; }
+.demo-auto-deploy .deployment-roster { pointer-events: none; }
+.demo-auto-deploy .deployment-person { cursor: default; }
+.demo-auto-deploy .deployment-person.demo-selected-now { animation: demo-person-selected .4s ease-out; }
+.demo-auto-deploy.stage-linking #launch-operation { opacity: 1; animation: demo-establish-link .75s ease-in-out infinite alternate; }
 .deployment-brief { display: grid; grid-template-columns: 1fr 1.5fr 1.2fr; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--base-line); }
 .deployment-brief span { display: flex; flex-direction: column; gap: 5px; }
 .deployment-brief small, .deployment-dialog footer small { color: #777166; font-size: 6px; }
@@ -153,6 +161,17 @@
 .deployment-dialog > footer div { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 16px; border-right: 1px solid var(--base-line); }
 .deployment-dialog > footer b { color: #bdb49f; font-size: 8px; }
 .deployment-dialog > footer b.insufficient { color: var(--base-danger); }
+
+@keyframes demo-person-selected {
+  0% { transform: scale(.98); border-color: rgba(var(--base-warm-rgb),.15); background: rgba(var(--base-warm-rgb),.02); }
+  55% { transform: scale(1.015); box-shadow: 0 0 22px rgba(var(--base-warm-rgb),.24), inset 3px 0 var(--base-warm); }
+  100% { transform: scale(1); }
+}
+
+@keyframes demo-establish-link {
+  from { background: rgba(var(--base-warm-rgb),.12); box-shadow: inset 0 0 0 rgba(var(--base-warm-rgb),0); }
+  to { background: rgba(var(--base-warm-rgb),.3); box-shadow: inset 0 0 18px rgba(var(--base-warm-rgb),.16), 0 0 18px rgba(var(--base-warm-rgb),.16); }
+}
 
 .demo-intro { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 32px; background: radial-gradient(circle at 50% 38%, rgba(84,92,66,.28), rgba(2,4,3,.91) 62%); backdrop-filter: blur(8px); }
 .demo-intro-card { width: min(760px, 92vw); padding: 42px 48px 36px; border: 1px solid rgba(var(--base-warm-rgb),.58); background: linear-gradient(155deg, rgba(25,28,21,.98), rgba(8,10,8,.99)); box-shadow: 0 30px 120px #000, inset 0 1px rgba(255,255,255,.035); }
@@ -182,17 +201,17 @@
 .warm-button { font-size: 10px; }
 .base-section-heading { font-size: 11px; }
 .base-section-heading small { font-size: 9px; }
-.mission-kind, .mission-details, .mission-reward { font-size: 10px; }
+.mission-kind, .mission-details, .mission-reward { font-size: 11px; }
 .mission-card strong { font-size: 14px; }
-.mission-card > small, .operation-row b, .empty-copy { font-size: 10px; }
-.operation-row small, .operation-row button, .operation-row > strong { font-size: 10px; }
+.mission-card > small, .operation-row b, .empty-copy { font-size: 11px; }
+.operation-row small, .operation-row button, .operation-row > strong { font-size: 11px; }
 .command-heading small, .base-condition { font-size: 10px; }
 .command-heading strong, .facility strong { font-size: 13px; }
 .facility-code { font-size: 11px; }
-.facility small, .command-footer p, .quiet-button, .text-button { font-size: 10px; }
-.coverage-strip small, .roster-identity small, .roster-state { font-size: 9px; }
+.facility small, .command-footer p, .quiet-button, .text-button { font-size: 11px; }
+.coverage-strip small, .roster-identity small, .roster-state { font-size: 10px; }
 .roster-identity b { font-size: 12px; }
-.roster-row select, .base-eventbar p { font-size: 10px; }
+.roster-row select, .base-eventbar p { font-size: 11px; }
 .base-eventbar > span { font-size: 10px; }
 .deployment-dialog > header small, .deployment-brief small, .deployment-dialog footer small { font-size: 9px; }
 .deployment-brief b, .deployment-brief p, .deployment-dialog > footer b { font-size: 10px; }
