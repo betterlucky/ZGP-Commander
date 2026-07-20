@@ -310,7 +310,13 @@ export const mountBaseScreen = (
     if (!demoContinueReady || demoDeploymentStage === "linking") return;
     const team = campaign.availablePeople().slice(0, offer.protocolSquad);
     const person = team.find((candidate) => !selectedPeople.has(candidate.id));
-    if (!person) return;
+    if (!person) {
+      demoContinueReady = false;
+      demoDeploymentStage = "linking";
+      demoSelectedPersonId = null;
+      render();
+      return;
+    }
     const sequenceVersion = demoSequenceVersion;
     demoContinueReady = false;
     demoDeploymentStage = "selecting";
@@ -320,10 +326,7 @@ export const mountBaseScreen = (
     const finalSelection = selectedPeople.size >= team.length;
     window.setTimeout(() => {
       if (sequenceVersion !== demoSequenceVersion || demoDeploymentStage !== "selecting") return;
-      if (finalSelection) {
-        demoDeploymentStage = "linking";
-        demoSelectedPersonId = null;
-      } else demoContinueReady = true;
+      demoContinueReady = true;
       render();
     }, finalSelection ? demoFinalSelectionHoldMs : demoSelectionHoldMs);
   };
