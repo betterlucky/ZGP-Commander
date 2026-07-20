@@ -68,6 +68,55 @@ class TacticalAudio {
     oscillator.stop(start + duration + 0.02);
   }
 
+  private klaxonBlast(frequency: number, duration: number, gain: number, pan: number, delay: number): void {
+    if (!this.active) return;
+    const context = this.context!;
+    const start = context.currentTime + delay;
+    const end = start + duration;
+    const fundamental = context.createOscillator();
+    const harmonic = context.createOscillator();
+    const fundamentalGain = context.createGain();
+    const harmonicGain = context.createGain();
+    const filter = context.createBiquadFilter();
+    const tremolo = context.createGain();
+    const tremoloOscillator = context.createOscillator();
+    const tremoloDepth = context.createGain();
+    const envelope = context.createGain();
+
+    fundamental.type = "sawtooth";
+    fundamental.frequency.value = frequency;
+    harmonic.type = "square";
+    harmonic.frequency.value = frequency * 2.01;
+    fundamentalGain.gain.value = 0.76;
+    harmonicGain.gain.value = 0.14;
+    filter.type = "lowpass";
+    filter.frequency.value = 1180;
+    filter.Q.value = 1.4;
+
+    // A slight mechanical flutter keeps the sustained horn from sounding like
+    // a clean game-console oscillator.
+    tremolo.gain.value = 0.74;
+    tremoloOscillator.type = "sine";
+    tremoloOscillator.frequency.value = 11.5;
+    tremoloDepth.gain.value = 0.18;
+    tremoloOscillator.connect(tremoloDepth).connect(tremolo.gain);
+
+    envelope.gain.setValueAtTime(0.0001, start);
+    envelope.gain.exponentialRampToValueAtTime(gain, start + 0.045);
+    envelope.gain.setValueAtTime(gain, end - 0.09);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, end);
+
+    fundamental.connect(fundamentalGain).connect(filter);
+    harmonic.connect(harmonicGain).connect(filter);
+    filter.connect(tremolo).connect(envelope).connect(this.output(pan));
+    fundamental.start(start);
+    harmonic.start(start);
+    tremoloOscillator.start(start);
+    fundamental.stop(end + 0.02);
+    harmonic.stop(end + 0.02);
+    tremoloOscillator.stop(end + 0.02);
+  }
+
   public fire(weapon: "rifle" | "shotgun" | "smg" | "carbine", pan: number): void {
     if (!this.active) return;
     const now = this.context!.currentTime;
@@ -108,16 +157,11 @@ class TacticalAudio {
   }
 
   public runnerRush(): void {
-    // Three alternating klaxon pulses are easier to recognise over gunfire than
-    // the previous burst of filtered noise, while remaining an original cue.
-    for (let pulse = 0; pulse < 3; pulse += 1) {
-      const delay = pulse * 0.42;
-      const pan = pulse % 2 === 0 ? -0.18 : 0.18;
-      this.tone(330, 520, 0.19, 0.17, "sawtooth", pan, delay);
-      this.tone(165, 260, 0.22, 0.11, "square", -pan, delay);
-      this.tone(520, 350, 0.15, 0.14, "sawtooth", pan, delay + 0.21);
-      this.tone(260, 175, 0.17, 0.08, "square", -pan, delay + 0.21);
-    }
+    // Long, low alternating blasts read as a physical warning klaxon rather
+    // than the short frequency sweeps of an arcade alert.
+    this.klaxonBlast(285, 0.62, 0.2, -0.08, 0);
+    this.klaxonBlast(218, 0.62, 0.22, 0.08, 0.7);
+    this.klaxonBlast(285, 0.72, 0.2, -0.08, 1.4);
   }
 }
 
