@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Campaign } from "./campaign";
 import { CampaignStore } from "./store";
 
@@ -11,6 +11,15 @@ class MemoryStorage implements Storage {
   public key(index: number): string | null { return [...this.entries.keys()][index] ?? null; }
   public removeItem(key: string): void { this.entries.delete(key); }
   public setItem(key: string, value: string): void { this.entries.set(key, value); }
+}
+
+class BlockedStorage implements Storage {
+  public get length(): number { throw new DOMException("Storage blocked", "SecurityError"); }
+  public clear(): void { throw new DOMException("Storage blocked", "SecurityError"); }
+  public getItem(): string | null { throw new DOMException("Storage blocked", "SecurityError"); }
+  public key(): string | null { throw new DOMException("Storage blocked", "SecurityError"); }
+  public removeItem(): void { throw new DOMException("Storage blocked", "SecurityError"); }
+  public setItem(): void { throw new DOMException("Storage blocked", "SecurityError"); }
 }
 
 describe("CampaignStore save isolation", () => {
@@ -47,5 +56,20 @@ describe("CampaignStore save isolation", () => {
 
     expect(demoStore.load().state.day).toBe(1);
     expect(ordinaryStore.load().state.day).toBe(2);
+  });
+
+  it("continues with an in-memory campaign when browser storage is blocked", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: new BlockedStorage(),
+    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const store = new CampaignStore("blocked");
+
+    expect(() => store.save(new Campaign())).not.toThrow();
+    expect(store.reset().state.day).toBe(1);
+    expect(store.load().state.day).toBe(1);
+    expect(warning).toHaveBeenCalledTimes(3);
+    warning.mockRestore();
   });
 });

@@ -707,8 +707,13 @@ export class GpuLidarRenderer {
     ctx.strokeRect(breach.x - 9, breach.y - 5, 18, 10);
     ctx.fillStyle = state.breachOpen ? "#4deecf" : "#ff7b64"; ctx.font = "700 8px monospace";
     ctx.fillText(state.breachOpen ? "OPEN" : "F BREACH", breach.x, breach.y - 9);
-    ctx.strokeStyle = "rgba(77,238,207,.85)"; ctx.shadowColor = "#4deecf";
-    ctx.beginPath(); ctx.ellipse(extraction.x, extraction.y, 13, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    const extractionRadiusX = Math.max(18, transform.tileW * 1.2);
+    const extractionRadiusY = Math.max(9, transform.tileH * 1.2);
+    ctx.strokeStyle = "rgba(77,238,207,.92)"; ctx.fillStyle = "rgba(55,210,185,.12)"; ctx.shadowColor = "#4deecf";
+    ctx.beginPath(); ctx.ellipse(extraction.x, extraction.y, extractionRadiusX, extractionRadiusY, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#69f5da"; ctx.font = `700 ${Math.max(9, transform.tileW * 0.42)}px monospace`;
+    ctx.fillText("EXTRACTION", extraction.x, extraction.y + extractionRadiusY + Math.max(11, transform.tileH));
+    ctx.restore();
   }
 
   private drawRunnerMarkers(ctx: CanvasRenderingContext2D, state: SimulationState, transform: IsoTransform): void {

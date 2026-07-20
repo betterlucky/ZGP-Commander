@@ -23,19 +23,40 @@ when to leave.
 The repository contains a playable campaign vertical slice built with Codex and
 GPT-5.6 for [OpenAI Build Week 2026](https://openai.com/build-week/).
 
+## Built with Codex and GPT-5.6
+
+This project was built through rapid implementation by Codex followed by direct
+human playtesting, rejection and redirection. Codex accelerated the work by
+turning product constraints into the TypeScript/Vite application, deterministic
+campaign and tactical simulation, WebGL2 point-cloud renderer, Canvas fallback,
+automated tests, GitHub Pages deployment and browser-driven verification. It also
+implemented and compared several working visual approaches before synthesising
+the final Ghostlink point-sensor presentation.
+
+The human contribution was product and design authority: choosing a fresh browser
+build, defining persistent survivors and automatic combat, rejecting the earlier
+thermal and conventional graphical directions, selecting the incomplete remote
+sensor concept, setting the scope cut, tuning the risk and pacing through repeated
+playthroughs, and accepting or revising every player-facing decision. GPT-5.6 in
+Codex supplied implementation speed and technical iteration; the final game shape,
+trade-offs and acceptance decisions remained human-directed. The detailed,
+timestamped collaboration record is in [Build Week evidence](BUILD_WEEK.md).
+
 ## Judge quick start
 
 The hosted demo needs a desktop browser, keyboard and mouse. It uses a separate,
 fresh save on every page load and cannot overwrite an ordinary campaign.
 
 1. Open the [guided demo](https://betterlucky.github.io/ZGP-Commander/?demo=1).
-2. Choose **Begin 3–4 minute demo**, then **Establish Ghostlink**. A balanced
-   four-person squad is already selected.
-3. Press `F` to breach. Right-click a numbered cache to assign the best
+2. Choose **Begin 3–4 minute demo**, step through the four squad introductions,
+   then choose **Establish Link**.
+3. Complete the Ghostlink sensor check before opening the breach: zoom fully in
+   to inspect the reconstructed points, then fully out to return to command scale.
+4. Press `F` to breach. Right-click a numbered cache to assign the best
    scavenger while the other survivors cover them.
-4. Secure at least one cache, return every standing survivor to the marked
-   landing zone, and call extraction—or push deeper first.
-5. Review the returned squad, resources in transit and command log at base.
+5. Secure at least one cache, return every standing survivor to the clearly
+   marked extraction zone, and call extraction—or push deeper first.
+6. Review the returned squad, resources in transit and command log at base.
 
 No account, download or prior save is required. **Restart demo** gives the
 showcase a clean state at any time.
@@ -83,25 +104,32 @@ Add `?demo=1&canvas=1` to exercise the Canvas fallback explicitly.
 npm run check
 ```
 
-`check` runs 17 campaign/simulation tests, strict TypeScript validation and the
+`check` runs 29 campaign/simulation tests, strict TypeScript validation and the
 production Vite build used by continuous integration.
 
 ## Tactical controls
 
-- Drag on the tactical map to box-select survivors. Shift-drag adds to the
-  current selection.
-- Click squad cards or press a survivor's number to select them. Shift-click
-  cards for multi-selection, or press `A` to select everyone.
-- Right-click the floor to move selected survivors in formation.
-- Right-click a marked cache to assign the selected survivor with the best
-  scavenging skill; everyone else moves close to cover them.
-- Press `F` to breach the marked entrance, `H` to hold, `R` to reload in place,
-  and `Space` to pause.
-- Use `WASD`, the arrow keys, or middle-drag to pan. Number keys select a
-  survivor and centre the camera on them; `Ctrl/Cmd+A` selects the squad.
-- Use the mouse wheel, `+` / `-`, or the on-screen controls to zoom.
-- Secure at least one marked cache, then decide whether to push for more or
-  return every standing survivor to the landing zone and call extraction.
+| Input | Command |
+| --- | --- |
+| Left-drag on the tactical map | Box-select survivors |
+| `Shift` + left-drag | Add survivors to the current selection |
+| Click a survivor card | Select that survivor |
+| `Shift` + click a survivor card | Add or remove that survivor from the selection |
+| Double-click a survivor card | Select and smoothly centre the camera on that survivor |
+| Number keys `1`–`9` | Select and centre the camera on the corresponding survivor |
+| `Ctrl/Cmd+A` or **Select Squad** | Select every survivor; plain `A` pans the camera left |
+| Right-click open ground | Move selected survivors in formation |
+| Right-click a numbered cache | Assign the best selected scavenger while the others cover |
+| Right-click the marked extraction zone | Return selected survivors to the landing area |
+| `F` or **Breach Entry** | Open the marked entrance when a selected survivor is close enough |
+| `H` or **Hold Position** | Stop selected standing survivors and engage from their position |
+| `R` or **Reload** | Reload selected standing survivors in place |
+| `Space` or the pause button | Pause or resume; Space is reserved until the demo sensor check finishes |
+| `W` / `A` / `S` / `D` | Smoothly pan the camera up / left / down / right |
+| Arrow keys | Pan the camera in the corresponding direction |
+| Middle-button drag | Freely pan the camera |
+| Mouse wheel, `+` / `-`, or zoom buttons | Zoom around the pointer or viewport centre |
+| **Call Extraction** | End the mission once at least one cache is secured and every standing survivor is inside extraction |
 
 ## Architecture
 
@@ -132,5 +160,6 @@ Project documentation:
 The source code is available under the [MIT License](LICENSE). The licence does
 not grant rights to the ZGP Commander name or branding.
 
-The runner-rush alarm uses [Red Alert Klaxon Re-Creation](https://freesound.org/people/wrstone/sounds/125714/)
-by wrstone, made available under CC0 through Freesound.
+The runner-rush alarm uses [Red Alert Klaxon Re-Creation](https://pixabay.com/sound-effects/red-alert-klaxon-re-creation-107222/)
+by wrstone (Freesound), distributed through Pixabay under the Pixabay Content
+License. The included version has a short fade applied for the game.

@@ -131,6 +131,20 @@ describe("Tactical squad orders", () => {
     expect(walker && runner ? runner.speed > walker.speed * 4.5 : false).toBe(true);
   });
 
+  it("never revives a downed survivor when issuing a hold order", () => {
+    const simulation = new Simulation();
+    const downed = simulation.state.units[0];
+    downed.state = "down";
+    downed.health = 0;
+    simulation.selectAll();
+
+    simulation.issueHold();
+
+    expect(downed.state).toBe("down");
+    expect(downed.health).toBe(0);
+    expect(simulation.outcome().downPersonIds).toContain(downed.personId);
+  });
+
   it("telegraphs one deterministic runner rush after the first guided-demo cache", () => {
     const template = new Simulation();
     const simulation = new Simulation({

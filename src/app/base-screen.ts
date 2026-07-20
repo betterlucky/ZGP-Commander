@@ -245,7 +245,7 @@ export const mountBaseScreen = (
                 <article class="roster-row tier-${person.tier} ${acted.has(person.id) ? "acted" : ""}">
                   <span class="roster-mark">${person.callsign.slice(0, 1)}</span>
                   <span class="roster-identity"><b>${escapeHtml(person.name)}</b><small>${person.tier.toUpperCase()} · ${person.role} · ${person.weapon.toUpperCase()}</small></span>
-                  <span class="roster-state ${person.injuries.length ? "injured" : ""}">${acted.has(person.id) ? "DEPLOYED" : conditionLabel(person)}</span>
+                  <span class="roster-state ${person.injuries.length ? "injured" : ""}">${returnedToday.has(person.id) ? "RETURNED" : acted.has(person.id) ? "DEPLOYED" : conditionLabel(person)}</span>
                   <select data-assignment="${person.id}" aria-label="${escapeHtml(person.name)} assignment" ${acted.has(person.id) ? "disabled" : ""}>
                     ${(Object.keys(assignmentLabels) as BaseAssignment[]).map((assignment) => `<option value="${assignment}" ${person.assignment === assignment ? "selected" : ""}>${assignmentLabels[assignment]}</option>`).join("")}
                   </select>

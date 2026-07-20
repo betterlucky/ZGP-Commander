@@ -20,11 +20,19 @@ export class CampaignStore {
   }
 
   public save(campaign: Campaign): void {
-    localStorage.setItem(this.storageKey, JSON.stringify(campaign.snapshot()));
+    try {
+      localStorage.setItem(this.storageKey, JSON.stringify(campaign.snapshot()));
+    } catch (error) {
+      console.warn("Campaign progress could not be saved; continuing in memory.", error);
+    }
   }
 
   public reset(): Campaign {
-    localStorage.removeItem(this.storageKey);
+    try {
+      localStorage.removeItem(this.storageKey);
+    } catch (error) {
+      console.warn("Campaign save could not be cleared; starting a fresh in-memory campaign.", error);
+    }
     return new Campaign(createInitialCampaignState());
   }
 }

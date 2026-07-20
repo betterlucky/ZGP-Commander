@@ -265,7 +265,7 @@ export class Simulation {
 
   public issueHold(): void {
     if (this.state.missionStatus !== "active") return;
-    const selected = this.state.units.filter((unit) => unit.selected);
+    const selected = this.state.units.filter((unit) => unit.selected && unit.state !== "down");
     for (const unit of selected) {
       unit.path = [];
       unit.target = { ...unit.pos };

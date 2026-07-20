@@ -15,8 +15,8 @@ human/agent collaboration inspectable.
 - **Repository:** <https://github.com/betterlucky/ZGP-Commander>
 - **Primary Codex session ID:** `019f5be1-6f19-7213-b7e1-84fe4766a697`
 - **Model:** GPT-5.6 in Codex
-- **Submission build:** to be tagged `build-week-2026-submission` after the
-  deployed build and video have passed final verification
+- **Submission build:** immutable tag `build-week-2026-submission`; this tag is
+  created only after the final deployed build passes automated and browser checks
 
 ## Eligibility timeline
 
@@ -37,10 +37,16 @@ repository history begins after the opening time:
 | `45862e0` | 13 Jul, 10:29 p.m. | Tactical controls and operation-map overhaul |
 | `c0f4c62` | 14 Jul, 3:23 p.m. | Multi-cache salvage missions and expanded tactical flow |
 | `5e7935f` | 17 Jul, 9:42 p.m. | Isolated judge route, save-isolation tests, screenshots, deployment and submission package |
+| `8296a59` | 17 Jul, 9:45 p.m. | Public Build Week deployment and live judge links |
+| `17bd8ff` | 20 Jul, 5:53 p.m. | Guided onboarding, extraction consequences and first-time-player polish |
+| `96408a1` | 20 Jul, 7:21 p.m. | Squad telemetry, reload readability and runner-rush pressure system |
+| `1ae06d3` | 20 Jul, 10:10 p.m. | Final runner balance and klaxon fade after full demo playtesting |
 
 The Build Week submission polish added the isolated `?demo=1` route, guided
-three-step operation, judge-friendly reset, screenshots, deployment and
-submission documentation. The original commit timestamps remain intact.
+sensor and operation sequence, judge-friendly reset, screenshots, deployment,
+runner-rush encounter and submission documentation. The final correction pass
+and exact deployed revision are identified by the immutable submission tag; the
+original commit timestamps remain intact.
 
 ## Human and Codex decision ledger
 
@@ -105,7 +111,7 @@ npm ci
 npm run check
 ```
 
-At the time this evidence was prepared, `npm run check` passed all 17 tests,
+At the time this evidence was finalised, `npm run check` passed all 29 tests,
 strict TypeScript validation and the production Vite build. The guided route was
 also completed in a fresh browser: four survivors deployed, one cache was
 recovered, all four extracted, rewards entered transit and the base log recorded
@@ -125,5 +131,6 @@ cannot be initialised.
   simulated AI agents.
 - WebGL2 provides the intended visual fidelity; the Canvas fallback favours
   compatibility over identical appearance.
-- Audio is intentionally restrained and remains subject to browser autoplay
-  policy.
+- Audio begins only after user interaction and remains subject to browser
+  autoplay policy. The runner alarm is a credited, licensed external sound;
+  weapon, impact and interface effects are synthesised in code.

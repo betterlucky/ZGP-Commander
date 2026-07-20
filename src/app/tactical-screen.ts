@@ -228,7 +228,10 @@ export const mountTacticalScreen = (
     get("#contact-count").textContent = livingContacts.toString().padStart(2, "0");
     get("#signal-value").textContent = `${Math.round(89 + Math.sin(state.signalPulse * .8) * 4)}%`;
     const recovered = state.caches.filter((cache) => cache.secured).length;
-    const activeCache = state.caches.find((cache) => !cache.secured && cache.progress > 0);
+    const activeOperator = state.units.find((unit) => unit.state !== "down" && unit.interaction !== null);
+    const activeCache = activeOperator
+      ? state.caches.find((cache) => !cache.secured && cache.id === activeOperator.interaction)
+      : undefined;
     const retaskHint = get("#retask-hint");
     if (!activeCache && retaskHint.textContent?.includes("SCAVENGING")) {
       retaskHint.textContent = recovered ? "CACHE SECURED · EXTRACT OR PUSH DEEPER" : "SCAVENGE INTERRUPTED · ISSUE A NEW ORDER";
@@ -237,7 +240,7 @@ export const mountTacticalScreen = (
     get("#breach-heading").textContent = state.breachOpen ? "ENTRY BREACH OPEN" : "ENTRY BREACH CLOSED";
     get("#breach-copy").textContent = state.breachOpen ? "Interior access available" : "Press F to open the marked entry";
     get("#cache-fraction").textContent = `${recovered} / ${state.caches.length}`;
-    get("#cache-copy").textContent = recovered === state.caches.length ? "All known caches recovered" : activeCache ? "Assigned scavenger transferring supplies; squad covering" : recovered ? "Extract now with partial salvage or continue" : state.breachOpen ? "Right-click a cache to assign the best scavenger" : "Breach, then recover any cache";
+    get("#cache-copy").textContent = recovered === state.caches.length ? "All known caches recovered" : activeCache ? activeCache.progress > 0 ? "Assigned scavenger transferring supplies; squad covering" : "Assigned scavenger moving to cache; squad covering" : recovered ? "Extract now with partial salvage or continue" : state.breachOpen ? "Right-click a cache to assign the best scavenger" : "Breach, then recover any cache";
     get("#cache-progress").style.width = `${(activeCache?.progress ?? (recovered === state.caches.length ? 1 : 0)) * 100}%`;
     const demoGuide = root.querySelector<HTMLElement>("#demo-guide");
     if (!sensorCentered && currentTransform()) {
@@ -254,7 +257,7 @@ export const mountTacticalScreen = (
             : !state.breachOpen
               ? `<small>STEP 1 OF 3</small><span><b>Your whole squad is selected. Keep them together for now, or click a unit card to command someone independently.</b><em>Press F to breach the marked entry.</em></span>`
               : activeCache
-                ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><span><b>Cache transfer in progress.</b><em>The scavenger is exposed; the rest of the selected squad covers automatically.</em></span>`
+                ? `<small>STEP 2 OF 3 · ${Math.round(activeCache.progress * 100)}%</small><span><b>${activeCache.progress > 0 ? "Cache transfer in progress." : "Cache order received; scavenger moving into position."}</b><em>The scavenger is exposed; the rest of the selected squad covers automatically.</em></span>`
                 : recovered === 0
                   ? `<small>STEP 2 OF 3</small><span><b>Right-click to move. Right-click a cache to start scavenging.</b><em>The best selected scavenger works while the rest of the squad covers.</em></span>`
                   : simulation.canExtract()
@@ -278,13 +281,14 @@ export const mountTacticalScreen = (
     const magazineCapacity = state.units.reduce((sum, unit) => sum + unit.maxAmmo, 0);
     get("#loaded-total").textContent = `${loadedRounds} / ${magazineCapacity}`;
     get("#neutralised").textContent = state.contactsNeutralised.toString();
+    const extractReady = simulation.canExtract();
     const runnerAlert = get("#runner-alert");
     runnerAlert.classList.toggle("active", state.runnerRushStatus !== "idle");
     runnerAlert.classList.toggle("warning", state.runnerRushStatus === "warning");
+    runnerAlert.classList.toggle("extraction-ready", extractReady);
     runnerAlert.innerHTML = state.runnerRushStatus === "warning"
       ? `<small>FAST CONTACTS</small><b>RUNNER RUSH INCOMING</b><span>BRACE · ${Math.max(1, Math.ceil(state.runnerRushWarning))}</span>`
       : `<small>FAST CONTACTS</small><b>RUNNER RUSH</b><span>${state.runnerRushRemaining > 0 ? `HOLD · ${Math.ceil(state.runnerRushRemaining)}S` : "CLEAR REMAINING"}</span>`;
-    const extractReady = simulation.canExtract();
     get("#extraction-heading").textContent = extractReady ? "SQUAD IN EXTRACTION" : recovered ? "WITHDRAWAL AVAILABLE" : "EXTRACTION MARKED";
     get("#extraction-copy").textContent = recovered ? (extractReady ? "Standing survivors ready for pickup" : `Return to landing with ${recovered} recovered cache${recovered === 1 ? "" : "s"}`) : "Recover at least one cache before withdrawing";
     const extractButton = get<HTMLButtonElement>("#extract-button");
@@ -321,7 +325,7 @@ export const mountTacticalScreen = (
     const operationSummary = `${outcome.cachesRecovered} of ${outcome.cacheCount} caches recovered${outcome.objectiveCompleted ? "; the site was cleared." : "; the squad withdrew with partial salvage."} ${outcome.downPersonIds.length ? `${outcome.downPersonIds.length} survivor${outcome.downPersonIds.length === 1 ? " was" : "s were"} down when the link closed.` : "All linked survivors remained standing."}`;
     const resultCopy = showcaseComplete
       ? outcome.success
-        ? `${operationSummary} This concludes the guided mission. In the full campaign, survivors retain their injuries, ammunition, equipment and individual histories; salvage returns to the outpost, where you assign personnel and choose the next opportunity.`
+        ? `${operationSummary} This concludes the guided mission. In the full campaign, survivors retain their injuries, equipment and individual histories; committed ammunition stays spent and salvage returns to the outpost, where you assign personnel and choose the next opportunity.`
         : `${operationSummary} The link was lost, but the campaign is larger than one operation. In the full game, the outpost records the casualties and command continues with the survivors left behind. This still concludes the guided mission—you can reset the showcase and try a different withdrawal decision.`
       : operationSummary;
     const result = document.createElement("section");
@@ -573,9 +577,9 @@ export const mountTacticalScreen = (
     if (event.code === "Space") {
       event.preventDefault();
       // Space advances the guided deployment before this screen mounts. Keep
-      // it reserved throughout the demo so that the same press—or a held-key
-      // repeat—cannot freeze the sensor lesson as the tactical view appears.
-      if (!demoMode) simulation.togglePause();
+      // it reserved until the sensor check is complete so the same press—or a
+      // held-key repeat—cannot freeze the point movement being demonstrated.
+      if (!demoMode || demoSensorStage === "complete") simulation.togglePause();
     }
     else if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); simulation.selectAll(); }
     else if (["a", "d", "w", "s", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(event.key.toLowerCase())) {

@@ -132,6 +132,7 @@ button { font: inherit; color: inherit; }
 @keyframes demo-guide-arrive { from { opacity: 0; transform: translate(-50%,-10px); } }
 .runner-alert { position: absolute; z-index: 11; left: 50%; top: 18px; transform: translate(-50%,-12px); min-width: 430px; display: none; grid-template-columns: auto 1fr auto; align-items: center; gap: 13px; padding: 12px 15px; border: 1px solid rgba(255,86,61,.82); background: rgba(37,7,5,.95); box-shadow: 0 12px 38px rgba(0,0,0,.62), inset 3px 0 #ff5a3e, 0 0 28px rgba(255,72,42,.2); pointer-events: none; opacity: 0; }
 .runner-alert.with-guide { top: 118px; }
+.runner-alert.with-guide.extraction-ready { top: 176px; }
 .runner-alert.active { display: grid; opacity: 1; transform: translate(-50%,0); animation: runner-alert-pulse .62s ease-in-out infinite alternate; }
 .runner-alert small { color: #ff8c74; font-size: 9px; letter-spacing: .14em; }
 .runner-alert b { color: #ffe1d7; font-size: 13px; letter-spacing: .1em; text-align: center; }
