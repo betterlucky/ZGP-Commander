@@ -7,6 +7,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Fail the install if a dependency gains an install script not recorded
+  # in package.json allowScripts, instead of silently skipping it.
+  NPM_CONFIG_STRICT_ALLOW_SCRIPTS: "true"
+
 jobs:
   check:
     runs-on: ubuntu-latest
