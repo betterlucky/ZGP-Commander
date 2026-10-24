@@ -1,0 +1,31 @@
+version: 2
+
+updates:
+  # Application dependencies. Grouped so a quiet week is one PR, not six.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      dev-minor-patch:
+        dependency-type: development
+        patterns: ['*']
+        update-types: [minor, patch]
+      prod-minor-patch:
+        dependency-type: production
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # Workflow actions. These go stale silently — a pinned SHA keeps working
+  # until the runner drops the Node version it targets.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ['*']
